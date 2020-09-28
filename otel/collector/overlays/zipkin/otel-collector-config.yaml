@@ -3,9 +3,6 @@ receivers:
     protocols:
       grpc:
       http:
-exporters:
-  logging:
-    logLevel: debug
 processors:
   batch:
   memory_limiter:
@@ -20,10 +17,13 @@ processors:
 extensions:
   health_check: {}
   zpages: {}
+exporters:
+  zipkin:
+    endpoint: "http://somezipkin.target.com:9411/api/v2/spans" # Replace with a real endpoint.
 service:
   extensions: [health_check, zpages]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch, queued_retry]
-      exporters: [logging]
+      exporters: [zipkin]

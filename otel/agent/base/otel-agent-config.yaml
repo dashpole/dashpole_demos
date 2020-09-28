@@ -17,9 +17,6 @@ processors:
     spike_limit_mib: 100
     check_interval: 5s
   queued_retry:
-    num_workers: 4
-    queue_size: 100
-    retry_on_failure: true
 extensions:
   health_check: {}
   zpages: {}

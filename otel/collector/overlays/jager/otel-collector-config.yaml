@@ -3,9 +3,6 @@ receivers:
     protocols:
       grpc:
       http:
-exporters:
-  logging:
-    logLevel: debug
 processors:
   batch:
   memory_limiter:
@@ -20,10 +17,14 @@ processors:
 extensions:
   health_check: {}
   zpages: {}
+exporters:
+  jaeger:
+    endpoint: "somejaegergrpc.target.com:14250" # Replace with a real endpoint.
+    insecure: true
 service:
   extensions: [health_check, zpages]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch, queued_retry]
-      exporters: [logging]
+      exporters: [jaeger]
