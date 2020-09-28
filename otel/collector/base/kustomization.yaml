@@ -4,7 +4,12 @@ namespace: opentelemetry
 commonLabels:
   app: opentelemetry
   component: otel-collector
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- name: otel-collector-conf
+  files:
+  - otel-collector-config.yaml
 resources:
-- configmap.yaml
 - deployment.yaml
 - service.yaml

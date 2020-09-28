@@ -4,6 +4,11 @@ namespace: opentelemetry
 commonLabels:
   app: opentelemetry
   component: otel-agent
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- name: otel-agent-conf
+  files:
+  - otel-agent-config.yaml
 resources:
-- configmap.yaml
 - daemonset.yaml

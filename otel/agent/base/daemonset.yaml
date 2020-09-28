@@ -39,6 +39,6 @@ spec:
         - configMap:
             name: otel-agent-conf
             items:
-              - key: otel-agent-config
+              - key: otel-agent-config.yaml
                 path: otel-agent-config.yaml
           name: otel-agent-config-vol
