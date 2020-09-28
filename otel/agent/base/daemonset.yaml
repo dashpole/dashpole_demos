@@ -2,16 +2,8 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: otel-agent
-  labels:
-    component: otel-agent
 spec:
-  selector:
-    matchLabels:
-      component: otel-agent
   template:
-    metadata:
-      labels:
-        component: otel-agent
     spec:
       containers:
       - command:

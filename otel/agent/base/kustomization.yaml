@@ -3,8 +3,7 @@ kind: Kustomization
 namespace: opentelemetry
 commonLabels:
   app: opentelemetry
-  component: otel-collector
+  component: otel-agent
 resources:
 - configmap.yaml
-- deployment.yaml
-- service.yaml
+- daemonset.yaml
