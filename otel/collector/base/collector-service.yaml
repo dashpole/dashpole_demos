@@ -3,7 +3,6 @@ kind: Service
 metadata:
   name: otel-collector
   labels:
-    app: opentelemetry
     component: otel-collector
 spec:
   ports:

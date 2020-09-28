@@ -3,7 +3,6 @@ kind: ConfigMap
 metadata:
   name: otel-collector-conf
   labels:
-    app: opentelemetry
     component: otel-collector-conf
 data:
   otel-collector-config: |

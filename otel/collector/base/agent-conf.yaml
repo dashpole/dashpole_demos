@@ -3,7 +3,6 @@ kind: ConfigMap
 metadata:
   name: otel-agent-conf
   labels:
-    app: opentelemetry
     component: otel-agent-conf
 data:
   otel-agent-config: |
@@ -14,7 +13,7 @@ data:
           http:
     exporters:
       otlp:
-        endpoint: "otel-collector.default:55680" # TODO: Update me
+        endpoint: "otel-collector.opentelemetry:55680" # TODO: Update me
         insecure: true
     processors:
       batch:

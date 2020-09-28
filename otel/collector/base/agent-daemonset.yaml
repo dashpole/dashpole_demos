@@ -3,17 +3,14 @@ kind: DaemonSet
 metadata:
   name: otel-agent
   labels:
-    app: opentelemetry
     component: otel-agent
 spec:
   selector:
     matchLabels:
-      app: opentelemetry
       component: otel-agent
   template:
     metadata:
       labels:
-        app: opentelemetry
         component: otel-agent
     spec:
       containers:
