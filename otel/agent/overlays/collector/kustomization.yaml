@@ -1,0 +1,10 @@
+bases:
+- ../../base
+namespace: opentelemetry
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- name: otel-agent-conf
+  behavior: merge
+  files:
+  - otel-agent-config.yaml
