@@ -2,19 +2,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: otel-collector
-  labels:
-    component: otel-collector
 spec:
-  selector:
-    matchLabels:
-      component: otel-collector
   minReadySeconds: 5
   progressDeadlineSeconds: 120
   replicas: 1
   template:
-    metadata:
-      labels:
-        component: otel-collector
     spec:
       containers:
       - command:
