@@ -38,8 +38,6 @@ spec:
         volumeMounts:
         - name: otel-collector-config-vol
           mountPath: /conf
-#        - name: otel-collector-secrets
-#          mountPath: /secrets
         livenessProbe:
           httpGet:
             path: /
@@ -55,10 +53,3 @@ spec:
               - key: otel-collector-config.yaml
                 path: otel-collector-config.yaml
           name: otel-collector-config-vol
-#        - secret:
-#            name: otel-collector-secrets
-#            items:
-#              - key: cert.pem
-#                path: cert.pem
-#              - key: key.pem
-#                path: key.pem
