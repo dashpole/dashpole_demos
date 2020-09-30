@@ -13,7 +13,6 @@ processors:
     # 25% of limit up to 2G
     spike_limit_mib: 512
     check_interval: 5s
-  queued_retry:
 extensions:
   health_check: {}
   zpages: {}
@@ -25,5 +24,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch, queued_retry]
+      processors: [memory_limiter, batch]
       exporters: [zipkin]

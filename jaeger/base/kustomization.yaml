@@ -5,7 +5,7 @@ commonLabels:
   app: jaeger
   component: all-in-one
 resources:
-- collector-service.yaml
 - deployment.yaml
+- ingestion-service.yaml
 - namespace.yaml
 - query-service.yaml

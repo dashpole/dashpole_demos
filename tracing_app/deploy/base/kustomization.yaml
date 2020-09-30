@@ -5,5 +5,5 @@ commonLabels:
   app: demo
   component: demo
 resources:
-- job.yaml
+- deployment.yaml
 - namespace.yaml

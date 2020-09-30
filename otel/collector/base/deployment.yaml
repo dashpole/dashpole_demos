@@ -5,7 +5,6 @@ metadata:
 spec:
   minReadySeconds: 5
   progressDeadlineSeconds: 120
-  replicas: 1
   template:
     spec:
       containers:
@@ -26,7 +25,6 @@ spec:
         ports:
         - containerPort: 55679 # Default endpoint for ZPages.
         - containerPort: 55680 # Default endpoint for OpenTelemetry receiver.
-        # - containerPort: 8888  # Default endpoint for querying metrics.
         volumeMounts:
         - name: otel-collector-config-vol
           mountPath: /conf

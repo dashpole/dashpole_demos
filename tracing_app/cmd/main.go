@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 	"time"
 
 	"go.opentelemetry.io/otel/api/global"
@@ -39,17 +38,22 @@ func main() {
 
 	tracer := global.Tracer("demo-tracer")
 
-	ctx := context.Background()
-	ctx, outerSpan := tracer.Start(ctx, "OuterSpan")
-	time.Sleep(time.Second)
+	for {
+		log.Println("Starting trace...")
+		ctx := context.Background()
+		ctx, outerSpan := tracer.Start(ctx, "OuterSpan")
+		time.Sleep(time.Second)
 
-	ctx, innerSpan := tracer.Start(ctx, "InnerSpan")
-	time.Sleep(time.Second)
-	innerSpan.End()
+		ctx, innerSpan := tracer.Start(ctx, "InnerSpan")
+		time.Sleep(time.Second)
+		innerSpan.End()
 
-	time.Sleep(time.Second)
-	outerSpan.End()
+		time.Sleep(time.Second)
+		outerSpan.End()
 
-	log.Println("Finished tracing demo...")
-	os.Exit(0)
+		log.Println("Ended trace...")
+
+		// Limit to one trace every ~minute
+		time.Sleep(time.Minute)
+	}
 }
