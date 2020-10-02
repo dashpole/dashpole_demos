@@ -4,8 +4,9 @@ receivers:
       grpc:
       http:
 exporters:
-  logging:
-    logLevel: debug
+  otlp:
+    endpoint: "otel-collector.opentelemetry:55680"
+    insecure: true
 processors:
   batch:
   memory_limiter:
@@ -25,4 +26,4 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
+      exporters: [otlp]

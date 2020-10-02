@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracing-demo
+spec:
+  template:
+    spec:
+      nodeSelector: 
+        kubernetes.io/hostname: e2e-test-dashpole-minion-group-81hb
+      containers:
+      - name: tracing-demo
+        env:
+        - name: OTEL_EXPORTER_OTLP_ENDPOINT
+          value: otel-agent.opentelemetry:55680

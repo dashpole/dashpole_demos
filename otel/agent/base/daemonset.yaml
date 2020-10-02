@@ -5,8 +5,6 @@ metadata:
 spec:
   template:
     spec:
-      hostNetwork: true
-      dnsPolicy: ClusterFirstWithHostNet
       containers:
       - command:
           - "/otelcol"

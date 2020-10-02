@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-agent
+spec:
+  topologyKeys:
+    - "kubernetes.io/hostname" # Require node local pods in the service
+  ports:
+  - name: otlp
+    port: 55680 # Default endpoint for OpenTelemetry receiver.

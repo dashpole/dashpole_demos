@@ -1,0 +1,8 @@
+bases:
+- ../../base
+namespace: opentelemetry
+commonLabels:
+  app: opentelemetry
+  component: otel-agent
+resources:
+- service.yaml

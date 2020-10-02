@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-agent
+spec:
+  template:
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
