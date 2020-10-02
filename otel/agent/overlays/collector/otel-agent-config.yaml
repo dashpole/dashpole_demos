@@ -5,7 +5,7 @@ receivers:
       http:
 exporters:
   otlp:
-    endpoint: "otel-collector.opentelemetry:55680" # TODO: Update me
+    endpoint: "otel-collector.opentelemetry:55680"
     insecure: true
 processors:
   batch:
@@ -17,10 +17,6 @@ processors:
     # 25% of limit up to 2G
     spike_limit_mib: 100
     check_interval: 5s
-  queued_retry:
-    num_workers: 4
-    queue_size: 100
-    retry_on_failure: true
 extensions:
   health_check: {}
   zpages: {}
@@ -29,5 +25,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch, queued_retry]
+      processors: [memory_limiter, batch]
       exporters: [otlp]
