@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: disk-stress-deployment
+spec:
+        replicas: 20
+        template:
+                metadata:
+                        labels:
+                                app: disk-stress
+                spec:
+                        containers:
+                        - name: disk-stress
+                          image: busybox
+                          args: ["sh", "-c", "i=0; while true; do dd if=/dev/urandom of=file${i} bs=1048576 count=100 2>/dev/null; rm file${i}; i=$(($i+1)); done"]
+                          resources:
+                                  requests:
+                                          cpu: "0m"
+

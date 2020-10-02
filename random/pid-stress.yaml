@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: fork-deployment
+spec:
+        replicas: 7
+        template:
+                metadata:
+                        labels:
+                                app: fork
+                spec:
+                        containers:
+                        - name: fork
+                          image: busybox
+                          args: ["sh", "-c", "i=0; while [ $i -lt 2000 ]; do (while true; do sleep 5; done)& i=$(($i+1)); done; while true; do sleep 5; done"]
+                          resources:
+                                  limits:
+                                          cpu: "100m"
+

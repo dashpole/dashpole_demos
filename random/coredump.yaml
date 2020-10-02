@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: coredump-deployment
+spec:
+        replicas: 30
+        template:
+                metadata:
+                        labels:
+                                app: coredump
+                spec:
+                        containers:
+                        - name: coredump
+                          image: derekwaynecarr/memhog
+                          command: ["/bin/sh", "-c", "dnf install procps -y; ulimit -c unlimited; while true; do (memhog 40000m &); sleep 10; ps axf | grep memhog | grep -v grep | awk '{print \"kill -ABRT \" $1}'| sh; done;"]
+                          resources:
+                                  requests:
+                                          cpu: "0m"
+

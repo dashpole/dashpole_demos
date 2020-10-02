@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: cpu-stress-deployment
+spec:
+        template:
+                metadata:
+                        labels:
+                                app: cpu-stress
+                spec:
+                        containers:
+                        - name: cpu-stress
+                          image: gcr.io/google-containers/stress:v1
+                          args: ["--cpus=10"]
+                          resources:
+                                  requests:
+                                          cpu: "0m"
+

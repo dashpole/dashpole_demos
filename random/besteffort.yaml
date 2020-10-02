@@ -1,0 +1,18 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: besteffort-deployment
+spec:
+        template:
+                metadata:
+                        labels:
+                                app: besteffort
+                spec:
+                        containers:
+                        - name: besteffort
+                          image: busybox
+                          args: ["sh", "-c", "while true; do sleep 10; done"]
+                          resources:
+                                  requests:
+                                          cpu: "0m"
+

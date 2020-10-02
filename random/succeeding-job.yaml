@@ -1,0 +1,17 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+        name: succeeding-job
+spec:
+        completions: 100
+        parallelism: 10
+        template:
+                spec:
+                        restartPolicy: Never
+                        containers:
+                        - name: succeeding-container
+                          image: busybox
+                          resources:
+                                requests:
+                                        cpu: 200m
+                          args: ["sh", "-c", "sleep 20; exit 0"]

@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: memory-stress-deployment
+spec:
+        replicas: 100
+        template:
+                metadata:
+                        labels:
+                                app: memory-stress
+                spec:
+                        containers:
+                        - name: memory-stress
+                          image: gcr.io/google-containers/stress:v1
+                          args: ["--mem-alloc-size=10Mi", "--mem-alloc-sleep=1s", "--mem-total=400Mi"]
+                          resources:
+                                  requests:
+                                          cpu: "0m"
+                                          memory: "100Mi"
+

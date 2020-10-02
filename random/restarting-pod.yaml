@@ -1,0 +1,25 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+        name: restarting-job
+spec:
+        parallelism: 50
+        completions: 10000000
+        template:
+                metadata:
+                        labels:
+                                app: restarting
+                spec:
+                        restartPolicy: "OnFailure"
+                        containers:
+                        - name: restarting
+                          image: busybox
+                          args: ["sh", "-c", "sleep 10"]
+                          resources:
+                                  requests:
+                                          cpu: "100m"
+                                          memory: "100Mi"
+                                  limits:
+                                          cpu: "100m"
+                                          memory: "150Mi"
+

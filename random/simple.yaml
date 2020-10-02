@@ -1,0 +1,21 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+        name: simple-deployment
+        labels:
+                  app: simple
+spec:
+        replicas: 3
+        selector:
+                matchLabels:
+                        app: simple
+        template:
+                metadata:
+                        labels:
+                                app: simple
+                spec:
+                        containers:
+                        - name: simple
+                          image: busybox
+                          args: ["sh", "-c", "while true; do echo hello; sleep 10; done"]
+
