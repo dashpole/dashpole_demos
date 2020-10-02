@@ -1,0 +1,29 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+exporters:
+  otlp:
+    endpoint: "otel-collector.opentelemetry:55680"
+    insecure: true
+processors:
+  batch:
+  memory_limiter:
+    # Same as --mem-ballast-size-mib CLI argument
+    ballast_size_mib: 165
+    # 80% of maximum memory up to 2G
+    limit_mib: 400
+    # 25% of limit up to 2G
+    spike_limit_mib: 100
+    check_interval: 5s
+extensions:
+  health_check: {}
+  zpages: {}
+service:
+  extensions: [health_check, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp]

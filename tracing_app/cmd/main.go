@@ -1,10 +1,12 @@
 package main
 
 import (
-	"context"
 	"log"
+	"net/http"
+	"os"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/api/global"
 	"go.opentelemetry.io/otel/exporters/otlp"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -15,14 +17,20 @@ import (
 
 func main() {
 	log.Println("Starting tracing demo...")
-	exporter, err := otlp.NewExporter(
+	opts := []otlp.ExporterOption{
 		otlp.WithInsecure(),
-		otlp.WithAddress("otel-collector.opentelemetry:55680"),
 		otlp.WithGRPCDialOption(grpc.WithBlock()), // block until connection is ready
-	)
+	}
+	addr, found := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	if found {
+		log.Printf("Sending spans to address: %v\n", addr)
+		opts = append(opts, otlp.WithAddress(addr))
+	}
+	exporter, err := otlp.NewExporter(opts...)
 	if err != nil {
 		log.Fatalf("Error creating otlp exporter: %v", err)
 	}
+	log.Println("Finished setting up exporter.")
 
 	tracerProvider := sdktrace.NewTracerProvider(
 		// Use always sample for demos
@@ -36,24 +44,20 @@ func main() {
 
 	global.SetTracerProvider(tracerProvider)
 
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", handler)
+	otelMux := otelhttp.NewHandler(mux, "ServeDemo")
+	log.Println("Serving on port 80.")
+	http.ListenAndServe(":80", otelMux)
+}
+
+func handler(w http.ResponseWriter, req *http.Request) {
+	log.Println("Serving Request...")
+	time.Sleep(time.Second)
+	ctx := req.Context()
 	tracer := global.Tracer("demo-tracer")
-
-	for {
-		log.Println("Starting trace...")
-		ctx := context.Background()
-		ctx, outerSpan := tracer.Start(ctx, "OuterSpan")
-		time.Sleep(time.Second)
-
-		ctx, innerSpan := tracer.Start(ctx, "InnerSpan")
-		time.Sleep(time.Second)
-		innerSpan.End()
-
-		time.Sleep(time.Second)
-		outerSpan.End()
-
-		log.Println("Ended trace...")
-
-		// Limit to one trace every ~minute
-		time.Sleep(time.Minute)
-	}
+	ctx, innerSpan := tracer.Start(ctx, "CustomSpan")
+	time.Sleep(time.Second)
+	innerSpan.End()
+	time.Sleep(time.Second)
 }

@@ -1,0 +1,11 @@
+bases:
+- ../../base
+namespace: demo
+generatorOptions:
+  disableNameSuffixHash: true
+configMapGenerator:
+- name: otel-agent-conf
+  files:
+  - otel-agent-config.yaml
+patches:
+- deployment.yaml
