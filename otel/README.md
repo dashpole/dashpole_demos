@@ -5,7 +5,7 @@ kubernetes yaml files.
 
 ### Before you begin, deploy the opentelemetry namespace
 ```
-kustomize build common/base | kubectl create -f -
+kubectl kustomize common/base | kubectl create -f -
 ```
 
 ### When you are all done, delete the namespace
@@ -13,23 +13,36 @@ kustomize build common/base | kubectl create -f -
 kubectl delete ns opentelemetry
 ```
 
-### Deploy just the agent daemonset with stdout exporter
-```
-kustomize build agent/base | kubectl apply -f -
-```
-
 ### Deploy the collector with the stdout exporter
 ```
-kustomize build collector/base | kubectl apply -f -
+kubectl kustomize collector/base | kubectl apply -f -
 ```
 
-### Deploy change the agent to send to the collector
+### Deploy just the agent daemonset with stdout exporter
 ```
-kustomize build agent/overlays/collector | kubectl apply -f -
+kubectl kustomize agent/base | kubectl apply -f -
+```
+
+### Deploy change the agent to send to the collector, and use listen on host network
+```
+kubectl kustomize agent/overlays/hostnetwork | kubectl apply -f -
+```
+
+### Deploy change the agent to send to the collector, and use a service that requires node-local traffic routing
+
+Note: This requires [enabling Kubernetes service topology](https://kubernetes.io/docs/tasks/administer-cluster/enabling-service-topology/).
+
+```
+kubectl kustomize agent/overlays/nodelocal | kubectl apply -f -
 ```
 
 ### Change the collector to send to jaeger
 ```
-kustomize build collector/overlays/jaeger | kubectl apply -f -
+kubectl kustomize collector/overlays/jaeger | kubectl apply -f -
+```
+
+### Change the collector to send to zipkin
+```
+kubectl kustomize collector/overlays/zipkin | kubectl apply -f -
 ```
 

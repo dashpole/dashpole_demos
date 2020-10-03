@@ -5,6 +5,7 @@ metadata:
 spec:
   topologyKeys:
     - "kubernetes.io/hostname" # Require node local pods in the service
+    # - "*"  # Prefer, instead of require node local routing.
   ports:
   - name: otlp
     port: 55680 # Default endpoint for OpenTelemetry receiver.
