@@ -36,13 +36,23 @@ Note: This requires [enabling Kubernetes service topology](https://kubernetes.io
 kubectl kustomize agent/overlays/nodelocal | kubectl apply -f -
 ```
 
-### Change the collector to send to jaeger
+### Deploy the collector with all exporters
+```
+kubectl kustomize collector/overlays/all-in-one | kubectl apply -f -
+```
+
+### Change the collector to send traces to jaeger
 ```
 kubectl kustomize collector/overlays/jaeger | kubectl apply -f -
 ```
 
-### Change the collector to send to zipkin
+### Change the collector to send traces to zipkin
 ```
 kubectl kustomize collector/overlays/zipkin | kubectl apply -f -
+```
+
+### Change the collector to send metrics to prometheus
+```
+kubectl kustomize collector/overlays/prometheus | kubectl apply -f -
 ```
 
