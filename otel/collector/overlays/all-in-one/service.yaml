@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+spec:
+  ports:
+  - name: internal-metrics
+    port: 8888
+  - name: external-metrics
+    port: 8889
