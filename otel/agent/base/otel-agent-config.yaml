@@ -8,6 +8,11 @@ exporters:
     endpoint: "otel-collector.opentelemetry:55680"
     insecure: true
 processors:
+  attributes:
+    actions:
+      - key: demo.used_agent
+        value: true
+        action: upsert
   batch:
   memory_limiter:
     # Same as --mem-ballast-size-mib CLI argument
@@ -25,5 +30,5 @@ service:
   pipelines:
     traces:
       receivers: [otlp]
-      processors: [memory_limiter, batch]
+      processors: [attributes, memory_limiter, batch]
       exporters: [otlp]
