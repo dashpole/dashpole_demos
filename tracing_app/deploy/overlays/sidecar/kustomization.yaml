@@ -1,8 +1,6 @@
 bases:
 - ../../base
 namespace: demo
-generatorOptions:
-  disableNameSuffixHash: true
 configMapGenerator:
 - name: otel-agent-conf
   files:
