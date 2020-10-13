@@ -21,6 +21,12 @@ func main() {
 		otlp.WithInsecure(),
 		otlp.WithGRPCDialOption(grpc.WithBlock()), // block until connection is ready
 	}
+	host, found := os.LookupEnv("OTEL_EXPORTER_OTLP_HOST")
+	if found {
+		addr := host + ":55680"
+		log.Printf("Sending spans to address: %v\n", addr)
+		opts = append(opts, otlp.WithAddress(addr))
+	}
 	addr, found := os.LookupEnv("OTEL_EXPORTER_OTLP_ENDPOINT")
 	if found {
 		log.Printf("Sending spans to address: %v\n", addr)

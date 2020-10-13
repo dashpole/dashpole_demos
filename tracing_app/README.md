@@ -23,9 +23,16 @@ kubectl kustomize overlays/collector-service | kubectl apply -f -
 kubectl kustomize overlays/sidecar | kubectl apply -f -
 ```
 
-### Run the application on the host network, and sent traces to the local agent
+### Run the application on the host network, and send traces to the local agent
 ```
 kubectl kustomize overlays/hostnetwork-agent | kubectl apply -f -
+```
+
+### Have the application detect the Host IP, and send traces to the local agent.
+
+This is similar to host network, but detects the host IP instead of running on host network.
+```
+kubectl kustomize overlays/hostip | kubectl apply -f -
 ```
 
 ### Send traces to the agent service, which can run with node local service topology

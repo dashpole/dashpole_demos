@@ -1,0 +1,14 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tracing-demo
+spec:
+  template:
+    spec:
+      containers:
+      - name: tracing-demo
+        env:
+        - name: OTEL_EXPORTER_OTLP_HOST
+          valueFrom:
+            fieldRef:
+              fieldPath: status.hostIP

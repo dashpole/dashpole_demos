@@ -1,4 +1,4 @@
-# The OpenCensus Agent
+# The OpenTelemetry Collector
 
 In general, running the OpenTelemetry Collector as a kubernetes daemonset or sidecar container is referred to as an "Agent".  The goal of using an Agent is to offload telemetry as quickly as possible from your application so that telemetry is not lost if the application crashes or fails.  
 
@@ -10,7 +10,20 @@ The centralized collector has to aggregate telemetry from all sources in the clu
 
 ### What should "most" things running in Kubernetes clusters do today (kubernetes 1.19)?
 
-Read about the other options below, and if those don't apply to you, a sidecar-based approach is probably the best.  This means running an OpenTelemetry Agent container in each pod that emits telemetry.  See [`tracing_app/deploy/overlays/sidecar`](https://github.com/dashpole/dashpole_demos/tree/master/tracing_app/deploy/overlays/sidecar) for an example patch and configuration for adding a sidecar container to a deployment.
+There are two viable options today: The sidecar approach, and sending to a hostnetwork daemonset through the host IP.
+
+
+The sidecar approach involves running an OpenTelemetry Agent container in each pod that emits telemetry.  See [`tracing_app/deploy/overlays/sidecar`](https://github.com/dashpole/dashpole_demos/tree/master/tracing_app/deploy/overlays/sidecar) for an example patch and configuration for adding a sidecar container to a deployment.  Sidecars can be expensive, and ties the deployment of your telemetry pipeline to the application, as they are located in the same pod.
+
+
+The host IP approach involves running an agent on each node, and listening on the host's 55680 port.  This can be done either by using host network (see [`otel/agent/overlays/hostnetwork`](https://github.com/dashpole/dashpole_demos/tree/master/otel/agent/overlays/hostnetwork)), or by using a host port (see [`otel/agent/overlays/hostport`](https://github.com/dashpole/dashpole_demos/tree/master/otel/agent/overlays/hostport)).  However, unlike using the sidecar approach, your application must add additional configuration to detect the host's IP, and configure the application to send telemetry there.  See [`tracing_app/deploy/overlays/hostip`](https://github.com/dashpole/dashpole_demos/tree/master/tracing_app/deploy/overlays/hostip) for an example of how this could be done.
+
+### Sidecar vs HostIP
+
+The sidecar approach is generally simpler, as it doesn't require changes to the application.  It is also easier to size CPU and memory of the sidecar container to your applications' needs.
+
+
+The HostIP approach provides better separation of concerns, and can make it easier for different teams to manage the application and the telemetry infrastructure.  It can be difficult to correctly size daemonsets, as telemetry output isn't neccessarily evenly spread across nodes in a cluster.
 
 ### When should I use the node local service?
 

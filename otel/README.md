@@ -23,9 +23,14 @@ kubectl kustomize collector/base | kubectl apply -f -
 kubectl kustomize agent/base | kubectl apply -f -
 ```
 
-### Deploy change the agent to send to the collector, and use listen on host network
+### Deploy change the agent to send to the collector, and listen on host network
 ```
 kubectl kustomize agent/overlays/hostnetwork | kubectl apply -f -
+```
+
+### Deploy change the agent to send to the collector, and use listen on a host port
+```
+kubectl kustomize agent/overlays/hostport | kubectl apply -f -
 ```
 
 ### Deploy change the agent to send to the collector, and use a service that requires node-local traffic routing
