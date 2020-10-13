@@ -3,8 +3,6 @@ kind: Deployment
 metadata:
   name: otel-collector
 spec:
-  minReadySeconds: 5
-  progressDeadlineSeconds: 120
   template:
     spec:
       containers:
