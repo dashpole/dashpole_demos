@@ -1,0 +1,37 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+processors:
+  attributes:
+    actions:
+      - key: demo.used_collector
+        value: true
+        action: upsert
+  batch:
+  memory_limiter:
+    # Same as --mem-ballast-size-mib CLI argument
+    ballast_size_mib: 683
+    # 80% of maximum memory up to 2G
+    limit_mib: 1500
+    # 25% of limit up to 2G
+    spike_limit_mib: 512
+    check_interval: 5s
+extensions:
+  health_check: {}
+  zpages: {}
+exporters:
+  jaeger:
+    endpoint: "ingestion.jaeger.svc:14250"
+    insecure: true
+  zipkin:
+    endpoint: "http://zipkin.zipkin.svc:9411/api/v2/spans"
+service:
+  extensions: [health_check, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes, memory_limiter, batch]
+      exporters: [jaeger, zipkin]
+  
