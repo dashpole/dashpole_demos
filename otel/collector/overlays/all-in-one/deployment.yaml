@@ -1,0 +1,10 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+spec:
+  template:
+    spec:
+      containers:
+      - name: otel-collector
+        image: otel/opentelemetry-collector-contrib-dev:latest

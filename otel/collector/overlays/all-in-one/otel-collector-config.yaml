@@ -32,15 +32,16 @@ exporters:
   prometheus:
     endpoint: "0.0.0.0:8889"
     namespace: prometheus
+  stackdriver:
 service:
   extensions: [health_check, zpages]
   pipelines:
     traces:
       receivers: [otlp]
       processors: [attributes, memory_limiter, batch]
-      exporters: [jaeger, zipkin, logging]
+      exporters: [jaeger, zipkin, stackdriver, logging]
     metrics:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [prometheus, logging]
+      exporters: [prometheus, stackdriver, logging]
   
