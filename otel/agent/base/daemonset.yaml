@@ -5,6 +5,13 @@ metadata:
 spec:
   template:
     spec:
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node.kubernetes.io/unschedulable"
+        operator: "Exists"
+        effect: "NoSchedule"
       containers:
       - command:
           - "/otelcol"
@@ -18,7 +25,7 @@ spec:
             cpu: 500m
             memory: 500Mi
           requests:
-            cpu: 100m
+            cpu: 3m
             memory: 100Mi
         ports:
         - containerPort: 55679 # ZPages endpoint.
@@ -28,10 +35,12 @@ spec:
         - name: otel-agent-config-vol
           mountPath: /conf
         livenessProbe:
+          timeoutSeconds: 10
           httpGet:
             path: /
             port: 13133 # Health Check extension default port.
         readinessProbe:
+          timeoutSeconds: 10
           httpGet:
             path: /
             port: 13133 # Health Check extension default port.
