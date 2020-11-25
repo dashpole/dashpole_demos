@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: otel-collector
+spec:
+  replicas: 2
+  template:
+    metadata:
+      annotations:
+        prometheus.io/collector: "true"
+        prometheus.io/internalport: "8888"
+        prometheus.io/externalport: "8889"
+    spec:
+      serviceAccountName: collector
+      containers:
+      - name: otel-collector
+        image: gcr.io/dashpole-gke-dev/otelcol:v0.1.0
+        env:
+        # Get the shard number from the host name
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: SHARDS
+          value: "2"
+
