@@ -1,0 +1,13 @@
+apiVersion: apps/v1
+kind: Statefulset
+metadata:
+  name: otel-collector
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/collector: "true"
+        prometheus.io/internalport: "8888"
+        prometheus.io/externalport: "8889"
+    spec:
+        serviceAccountName: collector

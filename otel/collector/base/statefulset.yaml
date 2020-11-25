@@ -1,8 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: otel-collector
 spec:
+  serviceName: otel-collector
+  # Fixes https://github.com/kubernetes-sigs/kustomize/issues/504
+  volumeClaimTemplates: []
   template:
     spec:
       containers:
@@ -17,8 +20,8 @@ spec:
           limits:
             cpu: 1
           requests:
-            cpu: 200m
-            memory: 400Mi
+            cpu: 100m
+            memory: 200Mi
         ports:
         - containerPort: 55679 # Default endpoint for ZPages.
         - containerPort: 55680 # Default endpoint for OpenTelemetry receiver.

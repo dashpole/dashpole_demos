@@ -5,11 +5,13 @@ metadata:
 spec:
   template:
     spec:
+      serviceAccount: prometheus
       containers:
       - name: prometheus
         image: prom/prometheus
         args:
           - '--config.file=/etc/prometheus/prometheus-config.yaml'
+          - '--log.level=debug'
         ports:
         - name: webui
           containerPort: 9090

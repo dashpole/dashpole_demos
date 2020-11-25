@@ -7,7 +7,7 @@ configMapGenerator:
   files:
   - otel-collector-config.yaml
 patches:
-- deployment.yaml
+- statefulset.yaml
 - service.yaml
 resources:
 - rbac.yaml

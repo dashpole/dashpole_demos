@@ -4,8 +4,6 @@ namespace: prometheus
 commonLabels:
   app: prometheus
   component: core
-generatorOptions:
-  disableNameSuffixHash: true
 configMapGenerator:
 - name: prometheus-config
   files:
@@ -13,4 +11,5 @@ configMapGenerator:
 resources:
 - deployment.yaml
 - namespace.yaml
+- rbac.yaml
 - service.yaml
