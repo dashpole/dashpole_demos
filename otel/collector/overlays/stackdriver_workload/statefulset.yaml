@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: otel-collector
+spec:
+  template:
+    spec:
+      serviceAccountName: collector
+      containers:
+      - name: otel-collector
+        image: gke.gcr.io/gke-metrics-agent:0.2.1-gke.0
+        command: 
+        - "/otelsvc"
+        # TODO: figure out how to enable health checks for this container image.  Disable them for now
+        livenessProbe:
+        readinessProbe:

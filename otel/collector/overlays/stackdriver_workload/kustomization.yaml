@@ -1,0 +1,12 @@
+bases:
+- ../../base
+namespace: opentelemetry
+configMapGenerator:
+- name: otel-collector-conf
+  behavior: merge
+  files:
+  - otel-collector-config.yaml
+patches:
+- statefulset.yaml
+resources:
+- rbac.yaml
