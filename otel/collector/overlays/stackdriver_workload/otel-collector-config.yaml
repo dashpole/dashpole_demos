@@ -37,11 +37,41 @@ receivers:
         - source_labels: [__meta_kubernetes_pod_name]
           action: replace
           target_label: kubernetes_pod_name
+processors:
+  metrics_export/self:
+    export_map:
+      "otelcol_exporter_sent_metric_points":
+        allowed_labels: ["exporter"]
+        export_name: "otelcol_exporter_sent_metric_points"
+      "otelcol_exporter_send_failed_metric_points":
+        allowed_labels: ["exporter"]
+        export_name: "otelcol_exporter_send_failed_metric_points"
+      "otelcol_receiver_accepted_metric_points":
+        allowed_labels: ["receiver", "transport"]
+        export_name: "otelcol_receiver_accepted_metric_points"
+      "otelcol_receiver_refused_metric_points":
+        allowed_labels: ["receiver", "transport"]
+        export_name: "otelcol_receiver_refused_metric_points"
+  # The above is roughly equivalent to this in OSS
+  # filter/self:
+  #   metrics:
+  #     include:
+  #       match_type: strict
+  #       metric_names:
+  #         - otelcol_exporter_sent_metric_points
+  #         - otelcol_exporter_send_failed_metric_points
+  #         - otelcol_receiver_accepted_metric_points
+  #         - otelcol_receiver_refused_metric_points
+
 exporters:
   stackdriver:
   
 service:
   pipelines:
     metrics:
-      receivers: [prometheus, prometheus/self]
+      receivers: [prometheus]
+      exporters: [stackdriver]
+    metrics/self:
+      receivers: [prometheus/self]
+      processors: [metrics_export/self]
       exporters: [stackdriver]
