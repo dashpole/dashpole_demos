@@ -1,0 +1,19 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prom-example
+spec:
+  template:
+    metadata:
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "1234"
+    spec:
+      containers:
+      - image: nilebox/prometheus-example-app@sha256:dab60d038c5d6915af5bcbe5f0279a22b95a8c8be254153e22d7cd81b21b84c5
+        imagePullPolicy: Always
+        name: prom-example
+        command:
+        - "/main"
+        - "--process-metrics"
+        - "--go-metrics"
