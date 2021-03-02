@@ -4,6 +4,9 @@ receivers:
       scrape_configs:
       - job_name: 'otel-collector'
         scrape_interval: 60s
+        metric_relabel_configs:
+        - regex: service_instance_id
+          action: labeldrop
         static_configs:
         - targets: ['0.0.0.0:8888']
   prometheus:
@@ -38,33 +41,42 @@ receivers:
           action: replace
           target_label: kubernetes_pod_name
 processors:
+  resource/self:
+    labels:
+      opencensus.resourcetype: k8s
+      cloud.zone: us-central1-c
+      k8s.cluster.name: cluster-1
+      k8s.pod.name: "$POD_NAME"
+      k8s.namespace.name: "$POD_NAMESPACE"
   metrics_export/self:
+    allowed_labels:
+    - opencensus.resourcetype
+    - cloud.zone
+    - k8s.cluster.name
+    - k8s.pod.name
+    - k8s.namespace.name
     export_map:
       "otelcol_exporter_sent_metric_points":
         allowed_labels: ["exporter"]
-        export_name: "otelcol_exporter_sent_metric_points"
+        export_as_int: true
+        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/exporter/sent_metric_points"
       "otelcol_exporter_send_failed_metric_points":
         allowed_labels: ["exporter"]
-        export_name: "otelcol_exporter_send_failed_metric_points"
+        export_as_int: true
+        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/exporter/send_failed_metric_points"
       "otelcol_receiver_accepted_metric_points":
         allowed_labels: ["receiver", "transport"]
-        export_name: "otelcol_receiver_accepted_metric_points"
+        export_as_int: true
+        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/receiver/accepted_metric_points"
       "otelcol_receiver_refused_metric_points":
         allowed_labels: ["receiver", "transport"]
-        export_name: "otelcol_receiver_refused_metric_points"
-  # The above is roughly equivalent to this in OSS
-  # filter/self:
-  #   metrics:
-  #     include:
-  #       match_type: strict
-  #       metric_names:
-  #         - otelcol_exporter_sent_metric_points
-  #         - otelcol_exporter_send_failed_metric_points
-  #         - otelcol_receiver_accepted_metric_points
-  #         - otelcol_receiver_refused_metric_points
+        export_as_int: true
+        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/receiver/refused_metric_points"
 
 exporters:
   stackdriver:
+  logging:
+    logLevel: debug
   
 service:
   pipelines:
@@ -73,5 +85,5 @@ service:
       exporters: [stackdriver]
     metrics/self:
       receivers: [prometheus/self]
-      processors: [metrics_export/self]
+      processors: [resource/self, metrics_export/self]
       exporters: [stackdriver]

@@ -14,3 +14,12 @@ spec:
         # TODO: figure out how to enable health checks for this container image.  Disable them for now
         livenessProbe:
         readinessProbe:
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
