@@ -127,11 +127,6 @@ receivers:
         relabel_configs:
         - action: labelmap
           regex: __meta_kubernetes_node_label_(.+)
-        metric_relabel_configs:
-        - source_labels: [__name__]
-          regex: container_cpu_usage_seconds_total
-          target_label: __name__
-          replacement: metric_new
 
       # Example scrape config for service endpoints.
       #
