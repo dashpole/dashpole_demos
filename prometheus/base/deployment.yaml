@@ -12,6 +12,7 @@ spec:
         args:
           - '--config.file=/etc/prometheus/prometheus-config.yaml'
           - '--log.level=debug'
+          - '--storage.tsdb.path=/prometheus/'
         ports:
         - name: webui
           containerPort: 9090
@@ -25,7 +26,11 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/prometheus
+        - name: prometheus-storage-volume
+          mountPath: /prometheus
       volumes:
       - name: config
         configMap:
           name: prometheus-config
+      - name: prometheus-storage-volume
+        emptyDir: {}

@@ -1,0 +1,24 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-server
+spec:
+  template:
+    spec:
+      containers:
+      - name: sidecar
+        image: gcr.io/stackdriver-prometheus/stackdriver-prometheus-sidecar:0.8.2
+        imagePullPolicy: Always
+        args:
+        - --prometheus.api-address=http://127.0.0.1:9090
+        - --prometheus.wal-directory=/prometheus/wal
+        # Change these to your project, location, and cluster
+        - --stackdriver.project-id=dashpole-gke-dev
+        - --stackdriver.kubernetes.location=us-central1-c
+        - --stackdriver.kubernetes.cluster-name=cluster-1
+        ports:
+        - name: sidecar
+          containerPort: 9091
+        volumeMounts:
+        - name: prometheus-storage-volume
+          mountPath: /prometheus
