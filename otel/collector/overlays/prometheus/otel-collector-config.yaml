@@ -102,7 +102,7 @@ receivers:
         # Kubernetes CIS Benchmark recommends against enabling the insecure HTTP
         # servers of Kubernetes, therefore the cAdvisor metrics on the secure handler
         # are used.
-        metrics_path: /metrics/cadvisor/foo
+        metrics_path: /metrics/cadvisor
 
         # This TLS & bearer token file config is used to connect to the actual scrape
         # endpoints for cluster components. This is separate to discovery auth
