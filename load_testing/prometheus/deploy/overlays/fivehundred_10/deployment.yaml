@@ -1,0 +1,139 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-testing
+spec:
+  replicas: 50
+  template:
+    spec:
+      containers:
+      - name: prometheus-client
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8080"
+        ports:
+        - name: metrics
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-1
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8081"
+        ports:
+        - name: metrics
+          containerPort: 8081
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-2
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8082"
+        ports:
+        - name: metrics
+          containerPort: 8082
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-3
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8083"
+        ports:
+        - name: metrics
+          containerPort: 8083
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-4
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8084"
+        ports:
+        - name: metrics
+          containerPort: 8084
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-5
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8085"
+        ports:
+        - name: metrics
+          containerPort: 8085
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-6
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8086"
+        ports:
+        - name: metrics
+          containerPort: 8086
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-7
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8087"
+        ports:
+        - name: metrics
+          containerPort: 8087
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-8
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8088"
+        ports:
+        - name: metrics
+          containerPort: 8088
+        resources:
+          requests:
+            cpu: "1m"
+      - name: prometheus-client-9
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        args:
+        - "--metrics=10"
+        - "--port=8089"
+        ports:
+        - name: metrics
+          containerPort: 8089
+        resources:
+          requests:
+            cpu: "1m"

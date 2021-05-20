@@ -1,0 +1,7 @@
+bases:
+- ../../base
+namespace: load-testing
+commonLabels:
+  app: load-testing
+patches:
+- deployment.yaml

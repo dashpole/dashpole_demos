@@ -1,0 +1,5 @@
+namespace: load-testing
+commonLabels:
+  app: load-testing
+resources:
+- podmonitor.yaml

@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: load-testing
+spec:
+  template:
+    spec:
+      nodeSelector:
+        cloud.google.com/gke-nodepool: testing-np-big
+      containers:
+      - name: prometheus-client
+        image: gcr.io/dashpole-gke-dev/prometheus-load-test:v0.2.0
+        command:
+        - "./main"
+        ports:
+        - name: metrics
+          containerPort: 8080
+        resources:
+          requests:
+            cpu: "1m"

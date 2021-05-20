@@ -1,0 +1,22 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: podmonitor-loadtest-singleton
+spec:
+  selector:
+    matchLabels:
+      app: foo
+  namespaceSelector:
+    matchNames:
+    - load-testing
+  podMetricsEndpoints:
+  - port: metrics
+    interval: 10s
+    path: /a/b/c/metrics
+    scheme: https
+    scrapeTimeout: 10s
+    metricRelabelings:
+    - sourceLabels: ["foo", "bar"]
+      action: drop
+    - sourceLabels: ["ding", "dong"]
+      action: keep
