@@ -1,0 +1,9 @@
+bases:
+- ../../base
+namespace: kube-state-metrics
+commonLabels:
+  app: kube-state-metrics
+resources:
+- podmonitor.yaml
+patches:
+- deployment.yaml

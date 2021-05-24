@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kube-state-metrics
+spec:
+  template:
+    spec:
+      containers:
+      - name: kube-state-metrics
+        args:
+          # just do pods and nodes for the demo
+          - '--resources=pods,nodes'          

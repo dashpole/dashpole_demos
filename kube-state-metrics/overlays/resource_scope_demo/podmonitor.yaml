@@ -1,0 +1,20 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: kube-state-metrics
+gkeSpecificSpec:
+  resourceScope: cluster
+spec:
+  selector:
+    matchLabels:
+      app: kube-state-metrics
+  namespaceSelector:
+    matchNames:
+    - kube-state-metrics
+  podMetricsEndpoints:
+  - port: http-metrics
+    interval: 10s
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      action: keep
+      regex: kube_pod_status_ready|kube_pod_container_status_running|kube_node_status_condition
