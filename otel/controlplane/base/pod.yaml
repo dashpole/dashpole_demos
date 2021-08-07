@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: otel-collector
+spec:
+  # The master node is usually not schedulable, so set the node name ourselves.
+  # Demo purposes only
+  nodeName: e2e-test-dashpole-master
+  # We need to run on the same network as the API Server
+  hostNetwork: true
+  containers:
+  - args:
+      - "--config=/conf/otel-collector-config.yaml"
+      - "--log-level=DEBUG"
+    image: otel/opentelemetry-collector-contrib-dev:latest
+    name: otel-collector
+    resources:
+      limits:
+        cpu: 1
+      requests:
+        cpu: 1m
+        memory: 1Mi
+    ports:
+    # This is the default port for OpenTelemetry
+    - containerPort: 4317
+    volumeMounts:
+    - name: otel-collector-config-vol
+      mountPath: /conf
+  volumes:
+    - configMap:
+        name: otel-collector-conf
+        items:
+          - key: otel-collector-config.yaml
+            path: otel-collector-config.yaml
+      name: otel-collector-config-vol

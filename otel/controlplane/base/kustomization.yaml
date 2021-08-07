@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: opentelemetry
+commonLabels:
+  app: opentelemetry
+  component: otel-collector
+configMapGenerator:
+- name: otel-collector-conf
+  files:
+  - otel-collector-config.yaml
+resources:
+- pod.yaml
