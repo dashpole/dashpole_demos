@@ -1,0 +1,23 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: solr
+spec:
+  # *** This section identifies the workload to monitor ***
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-release
+      app.kubernetes.io/name: solr
+      app.kubernetes.io/component: solr-exporter
+  namespaceSelector:
+    matchNames:
+    - default
+  # *** This section identifies HOW to monitor the workload ***
+  podMetricsEndpoints:
+  - port: exporter-port
+    # This has ~150 metrics!
+    # Filter down to just the ones we want for our dashboards.
+    metricRelabelings:
+    - sourceLabels: [__name__]
+      regex: solr_collections_live_nodes|solr_collections_replica_state|solr_zookeeper_nodestatus|solr_zookeeper_ensemble_size|solr_collections_shard_leader|solr_metrics_core_update_handler_adds_total
+      action: keep

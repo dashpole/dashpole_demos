@@ -6,3 +6,5 @@ commonLabels:
 resources:
 - deployment.yaml
 - namespace.yaml
+- podmonitor.yaml
+  #- poddashboard.yaml

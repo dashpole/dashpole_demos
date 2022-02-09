@@ -1,0 +1,10 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: rabbitmq
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  podMetricsEndpoints:
+  - port: prometheus

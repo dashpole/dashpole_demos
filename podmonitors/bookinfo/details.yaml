@@ -1,0 +1,16 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: details
+spec:
+  podMetricsEndpoints:
+  - port: http-envoy-prom
+    path: /stats/prometheus
+  namespaceSelector:
+    matchNames:
+    - default
+  selector:
+    matchLabels:
+      app: details
+      service.istio.io/canonical-name: details
+      service.istio.io/canonical-revision: v1

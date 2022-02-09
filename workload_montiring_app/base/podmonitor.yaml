@@ -1,0 +1,13 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: podmonitor-sample
+spec:
+  selector:
+    matchLabels:
+      app: prom-example
+  namespaceSelector:
+    matchNames:
+    - gke-workload-metrics
+  podMetricsEndpoints:
+  - port: metrics

@@ -1,0 +1,6 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: configconnector
+  annotations:
+    cnrm.cloud.google.com/project-id: dashpole-gke-dev

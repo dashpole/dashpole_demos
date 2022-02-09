@@ -1,0 +1,15 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: spark
+spec:
+# This doesn't work because the endpoint doesn't have TYPE text, and we can't handle UNKNOWN-typed metrics
+  podMetricsEndpoints:
+  - port: http
+  namespaceSelector:
+    matchNames:
+    - default
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-release
+      app.kubernetes.io/name: spark

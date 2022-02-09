@@ -1,0 +1,124 @@
+  apiVersion: monitoring.cnrm.cloud.google.com/v1beta1
+  kind: MonitoringDashboard
+  metadata:
+    name: rabbitmq
+  spec:
+    projectRef:
+      external: dashpole-gke-dev
+    displayName: "RabbitMQ"
+    columnLayout:
+      columns:
+      - weight: 2
+        widgets:
+        - title: "Ready messages"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_queue_messages_ready\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: "ALIGN_MEAN"
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Incoming Messages"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_channel_messages_published_total\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_RATE
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Publishers"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_channels\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_MEAN
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Connections"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_connections\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_MEAN
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Queues"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_queues\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_MEAN
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Unacknowledged messages"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_queue_messages_unacked\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_MEAN
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Outgoing messages / s"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_channel_messages_redelivered_total\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_RATE
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR
+        - title: "Consumers"
+          xyChart:
+            dataSets:
+            - timeSeriesQuery:
+                timeSeriesFilter:
+                  filter: "metric.type=\"workload.googleapis.com/rabbitmq_channel_consumers\" resource.type=\"k8s_container\""
+                  aggregation:
+                    perSeriesAligner: ALIGN_MEAN
+                unitOverride: "1"
+              plotType: LINE
+            timeshiftDuration: 0s
+            yAxis:
+              label: y1Axis
+              scale: LINEAR

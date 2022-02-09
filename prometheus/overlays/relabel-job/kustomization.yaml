@@ -1,0 +1,8 @@
+bases:
+- ../../base
+namespace: prometheus
+configMapGenerator:
+- name: prometheus-config
+  behavior: merge
+  files:
+  - prometheus-config.yaml

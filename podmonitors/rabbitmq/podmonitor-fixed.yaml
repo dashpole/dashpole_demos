@@ -1,0 +1,32 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  # POD_MONITOR_NAME and POD_MONITOR_NAMESPACE is how you identify your
+  # PodMonitor
+  name: rabbitmq
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: rabbitmq
+  podMetricsEndpoints:
+  - metricRelabelings:
+    - action: keep
+      regex: rabbitmq_.*
+      sourceLabels:
+      - __name__
+    - action: drop
+      regex: rabbitmq_queue_.*
+      sourceLabels:
+      - __name__
+    path: /metrics
+    port: metrics
+    scheme: http
+  - metricRelabelings:
+    - action: keep
+      regex: rabbitmq_queue_.*
+      sourceLabels:
+      - __name__
+    path: /metrics/per-object
+    port: metrics
+    scheme: http

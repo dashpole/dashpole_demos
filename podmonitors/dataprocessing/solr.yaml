@@ -1,0 +1,17 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: solr
+spec:
+  # *** This section identifies the workload to monitor ***
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-release
+      app.kubernetes.io/name: solr
+      app.kubernetes.io/component: solr-exporter
+  namespaceSelector:
+    matchNames:
+    - default
+  # *** This section identifies HOW to monitor the workload ***
+  podMetricsEndpoints:
+  - port: exporter-port

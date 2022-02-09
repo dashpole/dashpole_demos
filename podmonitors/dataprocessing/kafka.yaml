@@ -1,0 +1,16 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: kafka
+spec:
+  podMetricsEndpoints:
+  # exporter has ~100 streams
+  # jmx has ~500 metric streams
+  - port: metrics
+  namespaceSelector:
+    matchNames:
+    - default
+  selector:
+    matchLabels:
+      app.kubernetes.io/instance: my-release
+      app.kubernetes.io/name: kafka

@@ -1,0 +1,17 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodDashboard
+metadata:
+  name: example-poddashboard
+spec:
+  selector:
+    matchLabels:
+      app: prom-example
+  namespaceSelector:
+    matchNames:
+    - gke-workload-metrics
+  graphs:
+  - name: Requests
+    metric: example_requests_total
+    aggregation: rate
+  - name: Container Running
+    metric: kube_pod_container_status_running

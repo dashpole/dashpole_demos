@@ -5,6 +5,6 @@ metadata:
 spec:
   ports:
   - name: otlp # Default endpoint for OpenTelemetry receiver.
-    port: 55680
+    port: 4317
   - name: zpages
     port: 55679

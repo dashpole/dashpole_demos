@@ -40,6 +40,10 @@ receivers:
         - source_labels: [__meta_kubernetes_pod_name]
           action: replace
           target_label: kubernetes_pod_name
+        metric_relabel_configs:
+        - source_labels: [__name__]
+          regex: mysql_global_status_commands_total
+          action: keep
 processors:
   resource/self:
     attributes:
@@ -61,41 +65,51 @@ processors:
     - key: container.name
       value: collector
       action: upsert
-  metrics_export/self:
-    allowed_labels:
-    - opencensus.resourcetype
-    - cloud.zone
-    - k8s.cluster.name
-    - k8s.pod.name
-    - k8s.namespace.name
-    - container.name
-    export_map:
-      "otelcol_exporter_sent_metric_points":
-        allowed_labels: ["exporter"]
-        export_as_int: true
-        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/exporter/sent_metric_points"
-      "otelcol_exporter_send_failed_metric_points":
-        allowed_labels: ["exporter"]
-        export_as_int: true
-        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/exporter/send_failed_metric_points"
-      "otelcol_receiver_accepted_metric_points":
-        allowed_labels: ["receiver", "transport"]
-        export_as_int: true
-        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/receiver/accepted_metric_points"
-      "otelcol_receiver_refused_metric_points":
-        allowed_labels: ["receiver", "transport"]
-        export_as_int: true
-        export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/receiver/refused_metric_points"
+  # metrics_export/self:
+  #   allowed_labels:
+  #   - opencensus.resourcetype
+  #   - cloud.zone
+  #   - k8s.cluster.name
+  #   - k8s.pod.name
+  #   - k8s.namespace.name
+  #   - container.name
+  #   export_map:
+  #     "otelcol_exporter_sent_metric_points":
+  #       allowed_labels: ["exporter"]
+  #       export_as_int: true
+  #       export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/exporter/sent_metric_points"
+  #     "otelcol_exporter_send_failed_metric_points":
+  #       allowed_labels: ["exporter"]
+  #       export_as_int: true
+  #       export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/exporter/send_failed_metric_points"
+  #     "otelcol_receiver_accepted_metric_points":
+  #       allowed_labels: ["receiver", "transport"]
+  #       export_as_int: true
+  #       export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/receiver/accepted_metric_points"
+  #     "otelcol_receiver_refused_metric_points":
+  #       allowed_labels: ["receiver", "transport"]
+  #       export_as_int: true
+  #       export_name: "kubernetes.io/internal/addons/workload_metrics/otelcol/receiver/refused_metric_points"
 
 exporters:
-  stackdriver:
+  logging:
+    logLevel: debug
+  googlecloud:
+    timeout: 15s
+    metric:
+      prefix: workload.googleapis.com/
+    retry_on_failure:
+      enabled: false
+    sending_queue:
+      enabled: false
   
 service:
   pipelines:
     metrics:
       receivers: [prometheus]
-      exporters: [stackdriver]
-    metrics/self:
-      receivers: [prometheus/self]
-      processors: [resource/self, metrics_export/self]
-      exporters: [stackdriver]
+      exporters: [googlecloud]
+      # exporters: [googlecloud, logging]
+    # metrics/self:
+    #   receivers: [prometheus/self]
+    #   processors: [resource/self, metrics_export/self]
+    #   exporters: [googlecloud]

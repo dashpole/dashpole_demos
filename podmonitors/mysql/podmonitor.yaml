@@ -1,0 +1,18 @@
+apiVersion: monitoring.gke.io/v1alpha1
+kind: PodMonitor
+metadata:
+  name: mysql-podmonitor
+spec:
+  podMetricsEndpoints:
+  - interval: 60s
+    path: /metrics
+    port: prometheus
+    scrapeTimeout: 10s
+    #metricRelabelings:
+    #- sourceLabels: [__name__]
+    #  regex: mysql_global_status_commands_total
+    #  action: keep
+  selector:
+    matchLabels:
+      app.kubernetes.io/managed-by: mysql.presslabs.org
+      app.kubernetes.io/name: mysql
