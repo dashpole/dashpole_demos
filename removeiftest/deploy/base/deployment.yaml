@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: memory-leak-testing
+spec:
+  template:
+    spec:
+      containers:
+      - name: removeif-loop
+        image: gcr.io/dashpole-gke-dev/memory-leak-testing:v0.0.0
+        command:
+        - "./main"
+        resources:
+          requests:
+            cpu: "1m"
+          limits:
+            memory: "50Mi"
