@@ -18,7 +18,8 @@ exporters:
     # This is the jaeger pod's IP, and is hardcoded for the demo, 
     # since there is no kube-proxy on the master node
     endpoint: "10.64.3.4:14250"
-    insecure: true
+    tls:
+      insecure: true
 service:
   pipelines:
     traces:
