@@ -8,7 +8,6 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/binary"
-	"encoding/hex"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -22,6 +21,7 @@ import (
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/abi"
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/decoders"
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ktls"
+	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/propagation"
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ringbuf"
 )
 
@@ -32,6 +32,10 @@ type ConnKey struct {
 	SrcPort     uint16
 	DstIP       string
 	DstPort     uint16
+}
+
+func (k ConnKey) String() string {
+	return fmt.Sprintf("%s:%s:%d->%s:%d", k.ContainerID, k.SrcIP, k.SrcPort, k.DstIP, k.DstPort)
 }
 
 // InFlightTxRx tracks a request/response transaction.
@@ -52,6 +56,8 @@ type PipelineBridge struct {
 	decorator    *K8sDecorator
 	exporter     SpanExporter
 	reassembler  *ChunkReassembler
+	extractor    *propagation.ContextExtractor
+	injector     *propagation.ContextInjector
 	spansEmitted atomic.Uint64
 	inFlightTTL  time.Duration
 	stopCh       chan struct{}
@@ -65,8 +71,10 @@ func NewPipelineBridge(decorator *K8sDecorator, exporter SpanExporter) *Pipeline
 		decorator:   decorator,
 		exporter:    exporter,
 		reassembler: NewChunkReassembler(),
+		extractor:   propagation.NewContextExtractor(),
+		injector:    propagation.NewContextInjector(),
 		inFlightTTL: 30 * time.Second,
-		stopCh:      make(chan struct{}),
+		stopCh:       make(chan struct{}),
 	}
 	pb.cleanupWg.Add(1)
 	go pb.backgroundCleaner()
@@ -185,7 +193,7 @@ func (pb *PipelineBridge) ProcessRecord(containerID string, rec ringbuf.Record) 
 			_, _ = rand.Read(span.TraceID[:])
 			_, _ = rand.Read(span.SpanID[:])
 
-			parseHTTPDetails(payload, span)
+			pb.parseHTTPDetails(key, payload, span)
 
 			pb.inFlight[key] = &InFlightTxRx{
 				Span:      span,
@@ -199,7 +207,7 @@ func (pb *PipelineBridge) ProcessRecord(containerID string, rec ringbuf.Record) 
 				span.EndTime = eventTime
 				span.Duration = span.EndTime.Sub(span.StartTime)
 				span.RespBytes = len(payload)
-				parseHTTPResponseDetails(payload, span)
+				pb.parseHTTPResponseDetails(payload, span)
 
 				delete(pb.inFlight, matchKey)
 
@@ -231,7 +239,7 @@ func (pb *PipelineBridge) ProcessRecord(containerID string, rec ringbuf.Record) 
 			_, _ = rand.Read(span.TraceID[:])
 			_, _ = rand.Read(span.SpanID[:])
 
-			parseHTTPDetails(payload, span)
+			pb.parseHTTPDetails(key, payload, span)
 
 			pb.inFlight[key] = &InFlightTxRx{
 				Span:      span,
@@ -245,7 +253,7 @@ func (pb *PipelineBridge) ProcessRecord(containerID string, rec ringbuf.Record) 
 				span.EndTime = eventTime
 				span.Duration = span.EndTime.Sub(span.StartTime)
 				span.RespBytes = len(payload)
-				parseHTTPResponseDetails(payload, span)
+				pb.parseHTTPResponseDetails(payload, span)
 
 				delete(pb.inFlight, matchKey)
 
@@ -301,11 +309,14 @@ func isHTTPRequest(data []byte) bool {
 		return false
 	}
 	methods := []string{"GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH "}
-	str := string(data[:min(len(data), 10)])
 	for _, m := range methods {
-		if strings.HasPrefix(str, m) {
+		if bytes.HasPrefix(data, []byte(m)) {
 			return true
 		}
+	}
+	// Check for HTTP/2 preface
+	if strings.HasPrefix(string(data), "PRI * HTTP/2.0") {
+		return true
 	}
 	return false
 }
@@ -327,7 +338,19 @@ func formatHTTPName(data []byte) string {
 	return "HTTP Request"
 }
 
-func parseHTTPDetails(data []byte, span *TraceSpan) {
+func (pb *PipelineBridge) parseHTTPDetails(key ConnKey, data []byte, span *TraceSpan) {
+	// Extract traceparent via ContextExtractor
+	connKeyStr := key.String()
+	if tc, ok := pb.extractor.ExtractHTTP1(data); ok {
+		span.TraceID = tc.TraceID
+		span.ParentSpanID = tc.ParentSpanID
+		span.Attributes["w3c.traceparent"] = tc.FormatTraceparent()
+	} else if tc, ok := pb.extractor.ExtractHTTP2(connKeyStr, data); ok {
+		span.TraceID = tc.TraceID
+		span.ParentSpanID = tc.ParentSpanID
+		span.Attributes["w3c.traceparent"] = tc.FormatTraceparent()
+	}
+
 	reader := bufio.NewReader(bytes.NewReader(data))
 	req, err := http.ReadRequest(reader)
 	var bodyBytes []byte
@@ -338,20 +361,6 @@ func parseHTTPDetails(data []byte, span *TraceSpan) {
 		span.Attributes["http.request.method"] = req.Method
 		span.Attributes["url.path"] = req.URL.Path
 		span.Attributes["server.address"] = req.Host
-
-		// Extract W3C Traceparent if present
-		if tp := req.Header.Get("traceparent"); tp != "" {
-			span.Attributes["w3c.traceparent"] = tp
-			parts := strings.Split(tp, "-")
-			if len(parts) >= 4 && len(parts[1]) == 32 && len(parts[2]) == 16 {
-				if tBytes, err := hex.DecodeString(parts[1]); err == nil && len(tBytes) == 16 {
-					copy(span.TraceID[:], tBytes)
-				}
-				if pBytes, err := hex.DecodeString(parts[2]); err == nil && len(pBytes) == 8 {
-					copy(span.ParentSpanID[:], pBytes)
-				}
-			}
-		}
 
 		if req.Body != nil {
 			bodyBytes, _ = io.ReadAll(req.Body)
@@ -370,21 +379,6 @@ func parseHTTPDetails(data []byte, span *TraceSpan) {
 			span.Path = parts[1]
 			span.Attributes["http.request.method"] = parts[0]
 			span.Attributes["url.path"] = parts[1]
-		}
-		for _, line := range lines[1:] {
-			if strings.HasPrefix(strings.ToLower(line), "traceparent:") {
-				tp := strings.TrimSpace(line[len("traceparent:"):])
-				span.Attributes["w3c.traceparent"] = tp
-				parts := strings.Split(tp, "-")
-				if len(parts) >= 4 && len(parts[1]) == 32 && len(parts[2]) == 16 {
-					if tBytes, err := hex.DecodeString(parts[1]); err == nil && len(tBytes) == 16 {
-						copy(span.TraceID[:], tBytes)
-					}
-					if pBytes, err := hex.DecodeString(parts[2]); err == nil && len(pBytes) == 8 {
-						copy(span.ParentSpanID[:], pBytes)
-					}
-				}
-			}
 		}
 		// Try to find body separator
 		if idx := bytes.Index(data, []byte("\r\n\r\n")); idx != -1 {
@@ -427,7 +421,7 @@ func parseHTTPDetails(data []byte, span *TraceSpan) {
 	}
 }
 
-func parseHTTPResponseDetails(data []byte, span *TraceSpan) {
+func (pb *PipelineBridge) parseHTTPResponseDetails(data []byte, span *TraceSpan) {
 	reader := bufio.NewReader(bytes.NewReader(data))
 	resp, err := http.ReadResponse(reader, nil)
 	var bodyBytes []byte

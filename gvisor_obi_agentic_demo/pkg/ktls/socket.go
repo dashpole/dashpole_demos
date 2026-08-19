@@ -23,20 +23,24 @@ var (
 	ErrConnectionDown = errors.New("ktls: connection closed")
 )
 
+// OutboundFilterFunc allows in-flight injection/modification of plaintext before encryption and tapping.
+type OutboundFilterFunc func(tuple SocketTuple, plaintext []byte) []byte
+
 // TLSSocket wraps an underlying TCP connection with full-duplex Sentry kTLS emulation.
 type TLSSocket struct {
-	txMu       sync.Mutex
-	rxMu       sync.Mutex
-	conn       net.Conn
-	tuple      SocketTuple
-	pid        uint32
-	tid        uint32
-	ulpEnabled atomic.Bool
-	txCrypto   *CryptoContext
-	rxCrypto   *CryptoContext
-	tapSink    TelemetrySink
-	rxBuffer   []byte // Buffer for decrypted bytes not yet read by application
-	closed     atomic.Bool
+	txMu           sync.Mutex
+	rxMu           sync.Mutex
+	conn           net.Conn
+	tuple          SocketTuple
+	pid            uint32
+	tid            uint32
+	ulpEnabled     atomic.Bool
+	txCrypto       *CryptoContext
+	rxCrypto       *CryptoContext
+	tapSink        TelemetrySink
+	outboundFilter OutboundFilterFunc
+	rxBuffer       []byte // Buffer for decrypted bytes not yet read by application
+	closed         atomic.Bool
 }
 
 // NewTLSSocket wraps a standard TCP connection with kTLS capabilities.
@@ -49,6 +53,13 @@ func NewTLSSocket(conn net.Conn, tuple SocketTuple, pid, tid uint32, tapSink Tel
 		tapSink:  tapSink,
 		rxBuffer: make([]byte, 0, abi.TLS_MAX_PAYLOAD_SIZE),
 	}
+}
+
+// SetOutboundFilter configures an in-flight filter (e.g. W3C traceparent injection).
+func (s *TLSSocket) SetOutboundFilter(filter OutboundFilterFunc) {
+	s.txMu.Lock()
+	defer s.txMu.Unlock()
+	s.outboundFilter = filter
 }
 
 // SetSockOptTCP handles SOL_TCP options like TCP_ULP.
@@ -77,7 +88,7 @@ func (s *TLSSocket) SetSockOptTLS(name int, optVal []byte) error {
 	}
 
 	if len(optVal) < int(unsafe.Sizeof(abi.TLSCryptoInfo{})) {
-		return fmt.Errorf("crypto info buffer too small: %d", len(optVal))
+		return fmt.Errorf("optval too short (%d bytes)", len(optVal))
 	}
 
 	version := binary.LittleEndian.Uint16(optVal[0:2])
@@ -165,24 +176,30 @@ func (s *TLSSocket) Write(p []byte) (int, error) {
 		return 0, ErrConnectionDown
 	}
 
+	// Apply in-flight context injection if configured
+	payloadToWrite := p
+	if s.outboundFilter != nil && len(p) > 0 {
+		payloadToWrite = s.outboundFilter(s.tuple, p)
+	}
+
 	// If kTLS TX is not configured, write raw plaintext to underlying socket
 	if !s.ulpEnabled.Load() || s.txCrypto == nil {
-		return s.conn.Write(p)
+		return s.conn.Write(payloadToWrite)
 	}
 
 	// Plaintext Tap Point (TX)
-	if s.tapSink != nil && len(p) > 0 {
-		s.tapSink.EmitKTLSTx(s.tuple, s.pid, s.tid, p)
+	if s.tapSink != nil && len(payloadToWrite) > 0 {
+		s.tapSink.EmitKTLSTx(s.tuple, s.pid, s.tid, payloadToWrite)
 	}
 
 	// Chunk plaintext into TLS records up to 16KB
 	totalWritten := 0
-	for totalWritten < len(p) {
-		chunkSize := len(p) - totalWritten
+	for totalWritten < len(payloadToWrite) {
+		chunkSize := len(payloadToWrite) - totalWritten
 		if chunkSize > abi.TLS_MAX_PAYLOAD_SIZE {
 			chunkSize = abi.TLS_MAX_PAYLOAD_SIZE
 		}
-		chunk := p[totalWritten : totalWritten+chunkSize]
+		chunk := payloadToWrite[totalWritten : totalWritten+chunkSize]
 
 		recordFrame, err := s.txCrypto.SealRecord(abi.TLS_RECORD_TYPE_DATA, chunk)
 		if err != nil {
@@ -195,7 +212,8 @@ func (s *TLSSocket) Write(p []byte) (int, error) {
 		totalWritten += chunkSize
 	}
 
-	return totalWritten, nil
+	// Return application length p (or payloadToWrite length)
+	return len(p), nil
 }
 
 // Read reads from the socket, decrypting incoming TLS records and tapping plaintext.
@@ -216,7 +234,7 @@ func (s *TLSSocket) Read(p []byte) (int, error) {
 	// Drain any previously decrypted buffered data first
 	if len(s.rxBuffer) > 0 {
 		n := copy(p, s.rxBuffer)
-		s.rxBuffer = s.rxBuffer[n:]
+		s.rxBuffer = append(s.rxBuffer[:0], s.rxBuffer[n:]...)
 		return n, nil
 	}
 
