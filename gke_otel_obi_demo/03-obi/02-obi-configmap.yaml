@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: obi-config
+  namespace: otel-system
+  labels:
+    app: obi
+data:
+  ebpf-instrument-config.yaml: |
+    log_level: info
+    discovery:
+      instrument:
+        - k8s_namespace: "ai-agent"
+    otel_traces_export:
+      endpoint: "http://opentelemetry-collector.gke-managed-otel.svc.cluster.local:4317"
+      batch_timeout: 1s
+      max_queue_size: 4096
+    otel_metrics_export:
+      endpoint: "http://opentelemetry-collector.gke-managed-otel.svc.cluster.local:4318"
+      interval: 15s
+      features:
+        - application
+        - network
+    ebpf:
+      context_propagation: "all"
+      track_request_headers: true
+      traffic_control_backend: "auto"
+      payload_extraction:
+        http:
+          jsonrpc:
+            enabled: true
+          genai:
+            mcp:
+              enabled: true
+            retrieval:
+              enabled: true
+            embedding:
+              enabled: true
+            gemini:
+              enabled: true
+    attributes:
+      kubernetes:
+        enable: true
+    prometheus_export:
+      port: 9090
+      path: /metrics
+    internal_metrics:
+      prometheus:
+        port: 6060
+        path: /metrics

@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: opentelemetry-ebpf-instrumentation
+  namespace: otel-system
+  labels:
+    app: obi
+spec:
+  selector:
+    matchLabels:
+      app: obi
+  template:
+    metadata:
+      labels:
+        app: obi
+    spec:
+      serviceAccountName: obi-service-account
+      hostPID: true
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      tolerations:
+      - effect: NoSchedule
+        operator: Exists
+      - effect: NoExecute
+        operator: Exists
+      containers:
+      - name: obi
+        image: otel/ebpf-instrument:v0.11.0
+        imagePullPolicy: IfNotPresent
+        securityContext:
+          privileged: true
+        env:
+        - name: OTEL_EBPF_CONFIG_PATH
+          value: /etc/ebpf-instrument/ebpf-instrument-config.yaml
+        - name: OTEL_SERVICE_NAME
+          value: "gke-obi-engine"
+        volumeMounts:
+        - name: config
+          mountPath: /etc/ebpf-instrument
+          readOnly: true
+        - name: bpf-fs
+          mountPath: /sys/fs/bpf
+          mountPropagation: Bidirectional
+        - name: debug-fs
+          mountPath: /sys/kernel/debug
+        - name: proc-fs
+          mountPath: /proc
+          readOnly: true
+        ports:
+        - containerPort: 9090
+          name: prom-metrics
+        - containerPort: 6060
+          name: internal-mon
+        resources:
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+      volumes:
+      - name: config
+        configMap:
+          name: obi-config
+      - name: bpf-fs
+        hostPath:
+          path: /sys/fs/bpf
+      - name: debug-fs
+        hostPath:
+          path: /sys/kernel/debug
+      - name: proc-fs
+        hostPath:
+          path: /proc
