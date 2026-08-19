@@ -65,6 +65,23 @@ data:
     attributes:
       kubernetes:
         enable: true
+      select:
+        traces:
+          include:
+            - "*"
+            - "gen_ai.*"
+            - "rpc.*"
+            - "db.*"
+            - "http.*"
+            - "http.request.header.*"
+            - "http.response.header.*"
+        metrics:
+          include:
+            - "*"
+            - "gen_ai.*"
+            - "rpc.*"
+            - "db.*"
+            - "http.*"
     prometheus_export:
       port: 9090
       path: /metrics

@@ -132,10 +132,20 @@ data:
                         ]
                     }
                 ],
-                "generationConfig": {"temperature": 0.2, "maxOutputTokens": 256}
+                "generationConfig": {
+                    "temperature": 0.2,
+                    "maxOutputTokens": 256,
+                    "topP": 0.95,
+                    "candidateCount": 1
+                }
             }
             async with httpx.AsyncClient() as client:
-                g_res = await client.post(GEMINI_ENDPOINT, json=gemini_payload, timeout=5.0)
+                g_headers = {
+                    "gen_ai.system": "gemini",
+                    "gen_ai.request.model": "gemini-1.5-flash",
+                    "gen_ai.operation.name": "generate_content",
+                }
+                g_res = await client.post(GEMINI_ENDPOINT, json=gemini_payload, headers=g_headers, timeout=5.0)
                 if g_res.status_code == 200:
                     g_json = g_res.json()
                     candidates = g_json.get("candidates", [])
