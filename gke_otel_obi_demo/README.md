@@ -10,6 +10,7 @@ This demo highlights the major advancements made by the **OBI SIG** over the las
 * **Kernel-Level Context Propagation (`tpinjector`)**: Dynamic, in-flight W3C `traceparent` injection at the Linux socket layer, providing end-to-end distributed trace stitching across uninstrumented polyglot services without code changes.
 * **Model Context Protocol (MCP) Observability**: Automatic extraction and decoding of JSON-RPC `tools/list` and `tools/call` executions.
 * **Vector Database (Qdrant) Inspection**: Zero-code tracing of similarity search operations, vector sizes, and query paths in native compiled binaries (Rust).
+* **GenAI / LLM Model Tracing (Gemini)**: Automatic interception and tracing of Gemini `generateContent` model inference endpoints (`/v1beta/models/*`).
 * **GKE-Managed OpenTelemetry**: Turnkey telemetry ingestion using GKE's managed collector with Workload Identity exporting traces to **Google Cloud Trace** and RED metrics to **Google Cloud Monitoring** via Google Managed Service for Prometheus.
 
 ---
@@ -28,20 +29,20 @@ This demo highlights the major advancements made by the **OBI SIG** over the las
                                  ▼
                      ┌───────────────────────┐
                      │   agent-orchestrator  │ (Port 8000 - FastAPI / RAG Orchestrator)
-                     └───┬───────────┬───────┘
-                         │           │
-       Vector Search :6333        │ JSON-RPC :9000 (tools/call)
-                         │           │
-                         ▼           ▼
-        ┌──────────────────┐       ┌──────────────────┐
-        │knowledge-vectordb│       │ order-mcp-server │ (Port 9000 - MCP Server)
-        │ (Qdrant - Rust)  │       └──────────────────┘
-        └──────────────────┘                 │
-                                             │ HTTPS / Vertex AI
-                                             ▼
-                                  ┌──────────────────────┐
-                                  │   Vertex AI Gemini   │ (Gemini 1.5 / 2.0 Flash)
-                                  └──────────────────────┘
+                     └───┬───────────┬───┬───┘
+                         │           │   │
+       Vector Search :6333        │   │ JSON-RPC :9000 (tools/call)
+                         │           │   │
+                         ▼           │   ▼
+        ┌──────────────────┐         │ ┌──────────────────┐
+        │knowledge-vectordb│         │ │ order-mcp-server │ (Port 9000 - MCP Server)
+        │ (Qdrant - Rust)  │         │ └──────────────────┘
+        └──────────────────┘         │
+                                     │ Gemini generateContent :8080
+                                     ▼
+                          ┌──────────────────────┐
+                          │    gemini-service    │ (Gemini 1.5 Flash Model Server)
+                          └──────────────────────┘
 
   ════════════════════════ Node Observability Layer ════════════════════════
     [OBI DaemonSet (otel/ebpf-instrument)] ────► [GKE Managed OTel Collector]
@@ -59,8 +60,8 @@ This demo highlights the major advancements made by the **OBI SIG** over the las
 
 ### Act 1: The Observability Challenge with GenAI Microservices (Minutes 0:00 – 3:00)
 * **Talking Points:**
-  * Modern AI Agent architectures are distributed, polyglot microservice pipelines: frontend proxies, async Python orchestrators, compiled Vector Databases (Rust/C++), and Model Context Protocol (MCP) tool servers.
-  * Adding manual OpenTelemetry SDK instrumentation across all these components is invasive, costly, requires redeployments, and is impossible for pre-compiled third-party binaries (like Qdrant or closed-source MCP servers).
+  * Modern AI Agent architectures are distributed, polyglot microservice pipelines: frontend proxies, async Python orchestrators, compiled Vector Databases (Rust/C++), Model Context Protocol (MCP) tool servers, and LLM inference endpoints.
+  * Adding manual OpenTelemetry SDK instrumentation across all these components is invasive, costly, requires redeployments, and is impossible for pre-compiled third-party binaries (like Qdrant or closed-source MCP/model servers).
 * **Action:**
   * Run the zero-SDK code audit to prove that none of the application containers contain OpenTelemetry libraries:
     ```bash
@@ -82,19 +83,20 @@ This demo highlights the major advancements made by the **OBI SIG** over the las
 * **Talking Points:**
   * Historically, eBPF could only see single-hop spans without distributed context unless apps manually passed headers.
   * The OBI SIG has introduced in-kernel context injection (`tpinjector` socket probes): OBI intercepts TCP socket streams in the Linux kernel and injects W3C `traceparent` headers dynamically into outbound HTTP requests.
-  * When downstream services receive the request, OBI extracts the `traceparent`, establishing a unified, multi-tier distributed trace across Python, Rust, and JSON-RPC servers!
+  * When downstream services receive the request, OBI extracts the `traceparent`, establishing a unified, multi-tier distributed trace across Python, Rust, JSON-RPC, and LLM model servers!
 * **Action:**
   * Send a customer query and view the unified trace waterfall in Google Cloud Trace:
     ```bash
     ./scripts/send-query.sh
     ```
-  * Open **Google Cloud Trace**: [Cloud Trace Console](https://console.cloud.google.com/traces/traces?project=dashpole-dev). Show the single Trace ID connecting `web-frontend` $\rightarrow$ `agent-orchestrator` $\rightarrow$ `knowledge-vectordb` $\rightarrow$ `order-mcp-server`.
+  * Open **Google Cloud Trace**: [Cloud Trace Console](https://console.cloud.google.com/traces/traces?project=dashpole-dev). Show the single Trace ID connecting `web-frontend` $\rightarrow$ `agent-orchestrator` $\rightarrow$ `knowledge-vectordb` $\rightarrow$ `order-mcp-server` $\rightarrow$ `gemini-service`.
 
-### Act 4: MCP & Vector DB Semantic Telemetry (Minutes 9:00 – 12:00)
+### Act 4: MCP, Vector DB & Gemini Semantic Telemetry (Minutes 9:00 – 12:00)
 * **Talking Points:**
   * OBI automatically extracts domain-specific semantic attributes:
     * **Model Context Protocol (MCP)**: Captures `tools/call`, tool name (`get_order_status`), order IDs, and JSON-RPC payload sizes.
-    * **Vector Databases**: Traces similarity searches against `/collections/kb/points/search` in native Rust.
+    * **Vector Databases**: Traces similarity searches against `/collections/{collection}/points/search` in native Rust.
+    * **Gemini LLM Inference**: Traces `/v1beta/models/*` `generateContent` calls with payload size and execution latency.
   * Traces include full Kubernetes metadata (`k8s.pod.name`, `k8s.node.name`, `k8s.deployment.name`).
 
 ### Act 5: Live Troubleshooting & Cloud Monitoring RED Metrics (Minutes 12:00 – 15:00)
@@ -127,7 +129,8 @@ gke_otel_obi_demo/
 │   ├── 02-qdrant-vectordb.yaml           # Qdrant Vector DB Deployment & ClusterIP
 │   ├── 03-order-mcp-server.yaml          # MCP JSON-RPC Server Deployment & ClusterIP
 │   ├── 04-agent-orchestrator.yaml        # FastAPI Orchestrator Deployment & ClusterIP
-│   └── 05-web-frontend.yaml              # HTML/JS Web Frontend & Query Proxy
+│   ├── 05-web-frontend.yaml              # HTML/JS Web Frontend & Query Proxy
+│   └── 06-gemini-service.yaml            # Gemini LLM Inference Service & ClusterIP
 ├── 03-obi/
 │   ├── 01-obi-rbac.yaml                  # ServiceAccount & ClusterRole for OBI
 │   ├── 02-obi-configmap.yaml             # OBI Config v2 with eBPF context propagation
@@ -189,5 +192,5 @@ Open `http://localhost:8080` in your web browser.
 ## Security Audit
 
 * **External IP Enforcement**: Zero `LoadBalancer` services or public IPs are provisioned in this cluster.
-* **Workload Identity**: In-cluster ServiceAccounts are mapped to Google Cloud IAM roles (`roles/aiplatform.user`) without static credential files.
+* **Workload Identity**: In-cluster ServiceAccounts are mapped to Google Cloud IAM roles without static credential files.
 * **eBPF Capabilities**: OBI is deployed with isolated BPF privileges (`SYS_PTRACE`, `SYS_ADMIN`, `BPF`) strictly scoped to the `otel-system` namespace.

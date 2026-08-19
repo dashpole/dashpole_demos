@@ -49,7 +49,7 @@ pause
 echo -e "${BOLD}[Stage 2/7] Zero-SDK Code Purity Verification${NC}"
 # -----------------------------------------------------------------------------
 echo "Inspecting application containers for OpenTelemetry SDK libraries..."
-for deploy in web-frontend agent-orchestrator order-mcp-server; do
+for deploy in web-frontend agent-orchestrator order-mcp-server gemini-service; do
   OTEL_PKGS=$(kubectl exec -n "$NAMESPACE" "deploy/$deploy" -- python3 -c "
 import sys
 try:
@@ -85,7 +85,7 @@ echo ""
 pause
 
 # -----------------------------------------------------------------------------
-echo -e "${BOLD}[Stage 4/7] Live Traffic Generation & Model Context Protocol (MCP) Execution${NC}"
+echo -e "${BOLD}[Stage 4/7] Live Traffic Generation & Multi-Tier AI Agent Execution${NC}"
 # -----------------------------------------------------------------------------
 echo "Submitting customer support request through web-frontend:"
 echo -e "${CYAN}Prompt: 'What is the return policy for electronics, and can you check order #1042?'${NC}"
@@ -102,24 +102,26 @@ with urllib.request.urlopen(req, timeout=30) as r:
     elapsed = time.time() - start
     body = json.loads(r.read().decode())
     print(f"Status: HTTP {r.status} (Execution Time: {elapsed:.3f}s)")
+    print(f"LLM Model Used: {body.get(\"llm_model\")}")
     print(f"Discovered MCP Tools: {body.get(\"mcp_discovered_tools\")}")
     print(f"Tool Execution Result: {body.get(\"mcp_tool_result\")}")
     print(f"\nSynthesized Agent Response:\n{body.get(\"response\")}")
 '
 echo ""
-echo -e "${GREEN}✔ Request executed: 1) MCP Tool Discovery -> 2) Vector DB Retrieval -> 3) Tool Call (get_order_status)${NC}"
+echo -e "${GREEN}✔ Request executed: 1) MCP Tool Discovery -> 2) Vector DB Retrieval -> 3) Tool Call -> 4) Gemini LLM Inference${NC}"
 echo ""
 pause
 
 # -----------------------------------------------------------------------------
-echo -e "${BOLD}[Stage 5/7] Google Cloud Trace: 4-Tier Distributed Waterfall & Tool Spans${NC}"
+echo -e "${BOLD}[Stage 5/7] Google Cloud Trace: 5-Tier Distributed Waterfall & Model Spans${NC}"
 # -----------------------------------------------------------------------------
-echo "The eBPF kernel injector stitched W3C traceparents across all tiers & tool calls:"
+echo "The eBPF kernel injector stitched W3C traceparents across all tiers & model calls:"
 echo "  POST /api/query [web-frontend]"
 echo "  └── POST /chat [agent-orchestrator]"
-echo "      ├── POST /mcp/tools/list [order-mcp-server]                 <-- MCP Tool Discovery"
+echo "      ├── POST /mcp/tools/list [order-mcp-server]                    <-- MCP Tool Discovery"
 echo "      ├── POST /collections/*/points/search [knowledge-vectordb]   <-- Rust Vector DB (Qdrant)"
-echo "      └── POST /mcp/tools/call/get_order_status [order-mcp-server] <-- Tool Call Execution"
+echo "      ├── POST /mcp/tools/call/get_order_status [order-mcp-server] <-- MCP Tool Call Execution"
+echo "      └── POST /v1beta/models/* [gemini-service]                     <-- Gemini Model Inference"
 echo ""
 echo "Open Cloud Trace in Google Cloud Console:"
 echo -e "${BOLD}https://console.cloud.google.com/traces/traces?project=${PROJECT_ID}${NC}"

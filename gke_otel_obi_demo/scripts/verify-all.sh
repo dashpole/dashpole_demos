@@ -43,8 +43,8 @@ else
   exit 1
 fi
 
-# Zero-SDK Audit
-for deploy in web-frontend agent-orchestrator order-mcp-server; do
+# Zero-SDK Audit across all application services
+for deploy in web-frontend agent-orchestrator order-mcp-server gemini-service; do
   STATUS=$(kubectl exec -n "$NAMESPACE" "deploy/$deploy" -- python3 -c "
 import sys
 try:
