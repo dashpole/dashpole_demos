@@ -8,7 +8,9 @@ metadata:
 data:
   server.py: |
     import json
+    import os
     import sys
+    import time
     from http.server import HTTPServer, BaseHTTPRequestHandler
 
     class MCPHandler(BaseHTTPRequestHandler):
@@ -23,6 +25,17 @@ data:
                 self.end_headers()
 
         def do_POST(self):
+            # Check for simulated failure injection
+            latency = float(os.environ.get('INJECT_LATENCY', 0))
+            if latency > 0:
+                print(f"[FAULT INJECTION] Adding artificial latency of {latency}s...", flush=True)
+                time.sleep(latency)
+
+            if os.environ.get('INJECT_ERROR', 'false').lower() == 'true':
+                print("[FAULT INJECTION] Emulating 500 Internal Server Error...", flush=True)
+                self.send_error(500, "Injected Database Lock Timeout in Order MCP Server")
+                return
+
             length = int(self.headers.get('content-length', 0))
             req_data = self.rfile.read(length).decode('utf-8')
             try:
