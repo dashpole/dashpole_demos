@@ -1,0 +1,170 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-frontend-code
+  namespace: ai-agent
+  labels:
+    app: web-frontend
+data:
+  frontend.py: |
+    import httpx
+    from fastapi import FastAPI, Request
+    from fastapi.responses import HTMLResponse, JSONResponse
+
+    app = FastAPI(title="GKE OBI Demo Frontend")
+
+    HTML_TEMPLATE = """
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>GKE Managed OpenTelemetry & eBPF Demo</title>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 40px 20px; background-color: #f1f3f4; color: #202124; }
+        .container { max-width: 800px; margin: 0 auto; background: #ffffff; border-radius: 12px; padding: 32px; box-shadow: 0 4px 12px rgba(0,0,0,0.08); }
+        h1 { color: #1a73e8; margin-top: 0; font-size: 24px; display: flex; align-items: center; gap: 10px; }
+        .badge { background: #e8f0fe; color: #1967d2; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 16px; display: inline-block; margin-bottom: 16px; }
+        .subtitle { font-size: 14px; color: #5f6368; line-height: 1.5; margin-bottom: 24px; }
+        label { font-size: 14px; font-weight: 600; color: #3c4043; display: block; margin-bottom: 8px; }
+        textarea { width: 100%; box-sizing: border-box; padding: 12px; font-size: 14px; border: 1px solid #dadce0; border-radius: 8px; resize: vertical; margin-bottom: 16px; font-family: inherit; }
+        textarea:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
+        button { background-color: #1a73e8; color: #fff; font-size: 14px; font-weight: 500; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; transition: background 0.2s; }
+        button:hover { background-color: #1557b0; }
+        .output-panel { margin-top: 24px; background: #202124; color: #e8eaed; padding: 16px; border-radius: 8px; font-family: monospace; font-size: 13px; overflow-x: auto; min-height: 100px; white-space: pre-wrap; }
+        .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-top: 24px; }
+        .card { background: #f8f9fa; border: 1px solid #dadce0; border-radius: 8px; padding: 12px; font-size: 12px; }
+        .card b { color: #1a73e8; display: block; margin-bottom: 4px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="badge">Zero-Code eBPF Observability on GKE</div>
+        <h1>🚀 AI Customer Support Agent</h1>
+        <div class="subtitle">
+          Demonstrating in-kernel W3C trace context propagation, Model Context Protocol (MCP) tool execution, Qdrant vector retrieval, and Vertex AI Gemini synthesis—with <b>zero OpenTelemetry SDK code</b> in any service.
+        </div>
+
+        <label for="prompt">Customer Query:</label>
+        <textarea id="prompt" rows="3">Check my order #1042 status and find our return policy for opened items.</textarea>
+        <button onclick="runQuery()">Submit Query to Agent</button>
+
+        <div class="output-panel" id="output">Waiting for query submission...</div>
+
+        <div class="features">
+          <div class="card">
+            <b>Kernel Context Propagation</b>
+            W3C traceparent injected at TCP stream layer across all hops.
+          </div>
+          <div class="card">
+            <b>Model Context Protocol</b>
+            JSON-RPC tools/call (order lookup) intercepted automatically.
+          </div>
+          <div class="card">
+            <b>Managed Pipeline</b>
+            Exported via GKE Managed OTel to Google Cloud Trace.
+          </div>
+        </div>
+      </div>
+
+      <script>
+        async function runQuery() {
+          const out = document.getElementById('output');
+          const prompt = document.getElementById('prompt').value;
+          out.innerText = '⚡ [Frontend] Relaying request to AI Agent Orchestrator...\n';
+          try {
+            const startTime = performance.now();
+            const res = await fetch('/api/query', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({prompt: prompt})
+            });
+            const elapsed = Math.round(performance.now() - startTime);
+            const data = await res.json();
+            out.innerText = `✓ Transaction completed in ${elapsed}ms\n\n` + JSON.stringify(data, null, 2);
+          } catch(e) {
+            out.innerText = '❌ Error executing query: ' + e;
+          }
+        }
+      </script>
+    </body>
+    </html>
+    """
+
+    @app.get("/", response_class=HTMLResponse)
+    def get_ui():
+        return HTML_TEMPLATE
+
+    @app.get("/healthz")
+    def health():
+        return {"status": "ok"}
+
+    @app.post("/api/query")
+    async def proxy_query(request: Request):
+        payload = await request.json()
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "http://agent-orchestrator.ai-agent.svc.cluster.local:8000/chat",
+                json=payload,
+                timeout=25.0
+            )
+            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web-frontend
+  namespace: ai-agent
+  labels:
+    app: web-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: web-frontend
+  template:
+    metadata:
+      labels:
+        app: web-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          pip install --no-cache-dir fastapi uvicorn httpx
+          exec uvicorn --app-dir=/app frontend:app --host=0.0.0.0 --port=8080
+        ports:
+        - containerPort: 8080
+          name: web-http
+        volumeMounts:
+        - name: code
+          mountPath: /app
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+      volumes:
+      - name: code
+        configMap:
+          name: web-frontend-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web-frontend
+  namespace: ai-agent
+  labels:
+    app: web-frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: web-frontend
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: web-http

@@ -1,0 +1,191 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-orchestrator-code
+  namespace: ai-agent
+  labels:
+    app: agent-orchestrator
+data:
+  app.py: |
+    import os
+    import sys
+    import json
+    import asyncio
+    import httpx
+    from fastapi import FastAPI, Request
+    from fastapi.responses import JSONResponse
+
+    app = FastAPI(title="Customer Service Agent Orchestrator")
+
+    PROJECT_ID = os.environ.get("GCP_PROJECT", "dashpole-dev")
+    LOCATION = os.environ.get("GCP_LOCATION", "us-central1")
+
+    use_vertex = False
+    model = None
+    try:
+        import vertexai
+        from vertexai.generative_models import GenerativeModel
+        vertexai.init(project=PROJECT_ID, location=LOCATION)
+        model = GenerativeModel("gemini-2.0-flash")
+        use_vertex = True
+        print(f"Vertex AI Gemini initialized successfully for project {PROJECT_ID}", flush=True)
+    except Exception as e:
+        print(f"Vertex AI initialization notice: {e}", file=sys.stderr, flush=True)
+
+    @app.on_event("startup")
+    async def seed_knowledge_base():
+        """Ensure Qdrant collection is seeded with return policy knowledge."""
+        for attempt in range(15):
+            try:
+                async with httpx.AsyncClient() as client:
+                    res = await client.get("http://knowledge-vectordb.ai-agent.svc.cluster.local:6333/collections/kb", timeout=2.0)
+                    if res.status_code == 404:
+                        await client.put(
+                            "http://knowledge-vectordb.ai-agent.svc.cluster.local:6333/collections/kb",
+                            json={"vectors": {"size": 128, "distance": "Cosine"}},
+                            timeout=3.0
+                        )
+                        await client.put(
+                            "http://knowledge-vectordb.ai-agent.svc.cluster.local:6333/collections/kb/points?wait=true",
+                            json={"points": [{"id": 1, "vector": [0.1]*128, "payload": {"policy": "Standard products are eligible for 30-day return window. Opened electronics are accepted with original box."}}]},
+                            timeout=3.0
+                        )
+                        print("Seeded Qdrant KB collection successfully.", flush=True)
+                    break
+            except Exception:
+                await asyncio.sleep(2)
+
+    @app.get("/healthz")
+    def health():
+        return {"status": "ok", "vertex_ready": use_vertex}
+
+    @app.post("/chat")
+    async def chat(request: Request):
+        body = await request.json()
+        user_prompt = body.get("prompt", "")
+
+        # 1. Step 1: Semantic Retrieval from Qdrant Vector DB
+        rag_policy = "Standard products are eligible for 30-day return window."
+        try:
+            async with httpx.AsyncClient() as client:
+                v_res = await client.post(
+                    "http://knowledge-vectordb.ai-agent.svc.cluster.local:6333/collections/kb/points/search",
+                    json={"vector": [0.1]*128, "limit": 2, "with_payload": True},
+                    timeout=4.0
+                )
+                if v_res.status_code == 200:
+                    hits = v_res.json().get("result", [])
+                    if hits:
+                        rag_policy = hits[0].get("payload", {}).get("policy", rag_policy)
+        except Exception as e:
+            print(f"Vector search warning: {e}", file=sys.stderr, flush=True)
+
+        # 2. Step 2: Model Context Protocol (MCP) Tool Execution
+        order_data = {}
+        try:
+            async with httpx.AsyncClient() as client:
+                mcp_payload = {
+                    "jsonrpc": "2.0",
+                    "id": 1042,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "get_order_status",
+                        "arguments": {"order_id": "1042"}
+                    }
+                }
+                mcp_res = await client.post(
+                    "http://order-mcp-server.ai-agent.svc.cluster.local:9000",
+                    json=mcp_payload,
+                    timeout=4.0
+                )
+                if mcp_res.status_code == 200:
+                    order_data = mcp_res.json().get("result", {})
+        except Exception as e:
+            print(f"MCP tool call warning: {e}", file=sys.stderr, flush=True)
+            order_data = {"order_id": "1042", "status": "DELIVERED", "item": "Google Pixel 9 Pro"}
+
+        # 3. Step 3: Synthesis with Gemini on Vertex AI
+        generated_text = ""
+        if use_vertex and model:
+            try:
+                prompt = (
+                    "You are a helpful customer support AI.\n"
+                    f"Customer Query: {user_prompt}\n"
+                    f"Order Details: {json.dumps(order_data)}\n"
+                    f"Company Return Policy: {rag_policy}\n"
+                    "Provide a concise, professional answer summarizing order status and return eligibility."
+                )
+                response = model.generate_content(prompt)
+                generated_text = response.text
+            except Exception as e:
+                print(f"Vertex AI API call error: {e}", file=sys.stderr, flush=True)
+                generated_text = f"Order #{order_data.get('order_id', '1042')} is {order_data.get('status', 'DELIVERED')} ({order_data.get('item', 'Item')}). According to our policy: {rag_policy}"
+        else:
+            generated_text = f"Order #{order_data.get('order_id', '1042')} is {order_data.get('status', 'DELIVERED')} ({order_data.get('item', 'Item')}). According to our policy: {rag_policy}"
+
+        return JSONResponse({
+            "response": generated_text,
+            "mcp_tool_result": order_data,
+            "rag_policy_retrieved": rag_policy,
+            "status": "success"
+        })
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestrator
+  namespace: ai-agent
+  labels:
+    app: agent-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-orchestrator
+  template:
+    metadata:
+      labels:
+        app: agent-orchestrator
+    spec:
+      serviceAccountName: ai-agent-sa
+      containers:
+      - name: agent
+        image: python:3.11-slim
+        command: ["sh", "-c"]
+        args:
+        - |
+          pip install --no-cache-dir fastapi uvicorn httpx google-cloud-aiplatform
+          exec uvicorn --app-dir=/app app:app --host=0.0.0.0 --port=8000
+        ports:
+        - containerPort: 8000
+          name: agent-http
+        volumeMounts:
+        - name: code
+          mountPath: /app
+        resources:
+          requests:
+            cpu: 300m
+            memory: 512Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+      volumes:
+      - name: code
+        configMap:
+          name: agent-orchestrator-code
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-orchestrator
+  namespace: ai-agent
+  labels:
+    app: agent-orchestrator
+spec:
+  type: ClusterIP
+  selector:
+    app: agent-orchestrator
+  ports:
+  - port: 8000
+    targetPort: 8000
+    name: agent-http

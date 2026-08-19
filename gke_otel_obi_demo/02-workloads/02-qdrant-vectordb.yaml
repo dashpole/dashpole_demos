@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: knowledge-vectordb
+  namespace: ai-agent
+  labels:
+    app: knowledge-vectordb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: knowledge-vectordb
+  template:
+    metadata:
+      labels:
+        app: knowledge-vectordb
+    spec:
+      containers:
+      - name: qdrant
+        image: qdrant/qdrant:v1.12.1
+        ports:
+        - containerPort: 6333
+          name: http
+        - containerPort: 6334
+          name: grpc
+        resources:
+          requests:
+            cpu: 200m
+            memory: 256Mi
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: knowledge-vectordb
+  namespace: ai-agent
+  labels:
+    app: knowledge-vectordb
+spec:
+  type: ClusterIP
+  selector:
+    app: knowledge-vectordb
+  ports:
+  - port: 6333
+    targetPort: 6333
+    name: http
+  - port: 6334
+    targetPort: 6334
+    name: grpc

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-agent-sa
+  namespace: ai-agent
+  labels:
+    app.kubernetes.io/part-of: gke-otel-obi-demo
