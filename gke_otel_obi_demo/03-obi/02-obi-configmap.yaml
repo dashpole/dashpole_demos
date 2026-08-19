@@ -30,6 +30,8 @@ data:
         - network
         - application_service_graph
     ebpf:
+      buffer_sizes:
+        http: 262144
       context_propagation: all
       track_request_headers: true
       traffic_control_backend: auto
@@ -38,13 +40,17 @@ data:
           jsonrpc:
             enabled: true
           genai:
+            openai:
+              enabled: true
+            gemini:
+              enabled: true
+            anthropic:
+              enabled: true
             mcp:
               enabled: true
             retrieval:
               enabled: true
             embedding:
-              enabled: true
-            gemini:
               enabled: true
     routes:
       patterns:
@@ -52,6 +58,7 @@ data:
         - /mcp/tools/call/{tool_name}
         - /collections/{collection}/points/search
         - /v1beta/models/{model}:generateContent
+        - /v1/chat/completions
         - /api/query
         - /chat
       unmatched: heuristic

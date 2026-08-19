@@ -36,29 +36,56 @@ data:
             # Emulate slight LLM token generation latency (35ms)
             time.sleep(0.035)
 
-            # Generate structured response conforming to Google GenAI / Gemini API
-            resp = {
-                "candidates": [
-                    {
-                        "content": {
-                            "parts": [
-                                {
-                                    "text": "Order #1042 is DELIVERED (Google Pixel 9 Pro 256GB Obsidian, delivered 2026-08-10 via FedEx). Based on our return policy: Standard products are eligible for a 30-day return window. Opened electronics are accepted with the original box."
-                                }
-                            ],
-                            "role": "model"
-                        },
-                        "finishReason": "STOP",
-                        "index": 0
+            # Check if request is OpenAI chat format or Gemini generateContent format
+            is_openai_format = "/chat/completions" in self.path or "messages" in req
+
+            if is_openai_format:
+                resp = {
+                    "id": "chatcmpl-obi-demo-1042",
+                    "object": "chat.completion",
+                    "created": int(time.time()),
+                    "model": req.get("model", "gemini-1.5-flash-002"),
+                    "system_fingerprint": "fp_gemini_obi",
+                    "choices": [
+                        {
+                            "index": 0,
+                            "message": {
+                                "role": "assistant",
+                                "content": "Order #1042 is DELIVERED (Google Pixel 9 Pro 256GB Obsidian, delivered 2026-08-10 via FedEx). Based on our return policy: Standard products are eligible for a 30-day return window. Opened electronics are accepted with the original box."
+                            },
+                            "finish_reason": "stop"
+                        }
+                    ],
+                    "usage": {
+                        "prompt_tokens": 112,
+                        "completion_tokens": 48,
+                        "total_tokens": 160
                     }
-                ],
-                "usageMetadata": {
-                    "promptTokenCount": 112,
-                    "candidatesTokenCount": 48,
-                    "totalTokenCount": 160
-                },
-                "modelVersion": "gemini-1.5-flash-002"
-            }
+                }
+            else:
+                # Generate structured response conforming to Google GenAI / Gemini API
+                resp = {
+                    "candidates": [
+                        {
+                            "content": {
+                                "parts": [
+                                    {
+                                        "text": "Order #1042 is DELIVERED (Google Pixel 9 Pro 256GB Obsidian, delivered 2026-08-10 via FedEx). Based on our return policy: Standard products are eligible for a 30-day return window. Opened electronics are accepted with the original box."
+                                    }
+                                ],
+                                "role": "model"
+                            },
+                            "finishReason": "STOP",
+                            "index": 0
+                        }
+                    ],
+                    "usageMetadata": {
+                        "promptTokenCount": 112,
+                        "candidatesTokenCount": 48,
+                        "totalTokenCount": 160
+                    },
+                    "modelVersion": "gemini-1.5-flash-002"
+                }
 
             body = json.dumps(resp).encode('utf-8')
             self.send_response(200)
@@ -68,7 +95,7 @@ data:
             self.wfile.write(body)
 
     if __name__ == "__main__":
-        print("Starting Gemini Model Service on port 8080...", flush=True)
+        print("Starting Gemini / GenAI Model Service on port 8080...", flush=True)
         server = HTTPServer(('0.0.0.0', 8080), GeminiHandler)
         server.serve_forever()
 ---
