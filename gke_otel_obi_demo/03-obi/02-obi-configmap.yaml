@@ -7,24 +7,31 @@ metadata:
     app: obi
 data:
   ebpf-instrument-config.yaml: |
-    log_level: info
+    log_level: debug
     discovery:
       instrument:
         - k8s_namespace: "ai-agent"
+        - open_ports: "8000,8080,9000,6333"
     otel_traces_export:
       endpoint: "http://opentelemetry-collector.gke-managed-otel.svc.cluster.local:4317"
-      batch_timeout: 1s
+      insecure: true
+      protocol: grpc
+      sampler:
+        name: always_on
+      batch_timeout: 100ms
       max_queue_size: 4096
     otel_metrics_export:
       endpoint: "http://opentelemetry-collector.gke-managed-otel.svc.cluster.local:4318"
-      interval: 15s
+      insecure: true
+      protocol: http/protobuf
+      interval: 5s
       features:
         - application
         - network
     ebpf:
-      context_propagation: "all"
+      context_propagation: all
       track_request_headers: true
-      traffic_control_backend: "auto"
+      traffic_control_backend: auto
       payload_extraction:
         http:
           jsonrpc:
@@ -38,6 +45,8 @@ data:
               enabled: true
             gemini:
               enabled: true
+    routes:
+      unmatched: heuristic
     attributes:
       kubernetes:
         enable: true
