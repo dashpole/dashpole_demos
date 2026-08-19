@@ -23,6 +23,14 @@ data:
         "GEMINI_ENDPOINT",
         "http://gemini-service.ai-agent.svc.cluster.local:8080/v1beta/models/gemini-1.5-flash:generateContent"
     )
+    AGENT_URN = os.environ.get(
+        "AGENT_URN",
+        "urn:agent:projects-1030812186551:projects:1030812186551:locations:us-central1:agentregistry:services:agent-orchestrator"
+    )
+    MCP_SERVER_URN = os.environ.get(
+        "MCP_SERVER_URN",
+        "urn:mcp:projects-1030812186551:projects:1030812186551:locations:us-central1:agentregistry:services:order-mcp-server"
+    )
 
     @app.on_event("startup")
     async def seed_knowledge_base():
@@ -63,7 +71,14 @@ data:
                 list_res = await client.post(
                     "http://order-mcp-server.ai-agent.svc.cluster.local:9000/mcp/tools/list",
                     json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
-                    headers={"Mcp-Session-Id": "mcp-session-1042", "mcp-protocol-version": "2024-11-05"},
+                    headers={
+                        "Mcp-Session-Id": "mcp-session-1042",
+                        "mcp-protocol-version": "2024-11-05",
+                        "X-Agent-Id": AGENT_URN,
+                        "X-Mcp-Server-Id": MCP_SERVER_URN,
+                        "gen_ai.agent.id": AGENT_URN,
+                        "mcp.server.id": MCP_SERVER_URN
+                    },
                     timeout=3.0
                 )
                 if list_res.status_code == 200:
@@ -78,6 +93,7 @@ data:
                 v_res = await client.post(
                     "http://knowledge-vectordb.ai-agent.svc.cluster.local:6333/collections/kb/points/search",
                     json={"vector": [0.1]*128, "limit": 2, "with_payload": True},
+                    headers={"X-Agent-Id": AGENT_URN, "gen_ai.agent.id": AGENT_URN},
                     timeout=4.0
                 )
                 if v_res.status_code == 200:
@@ -103,7 +119,14 @@ data:
                 mcp_res = await client.post(
                     "http://order-mcp-server.ai-agent.svc.cluster.local:9000/mcp/tools/call/get_order_status",
                     json=mcp_payload,
-                    headers={"Mcp-Session-Id": "mcp-session-1042", "mcp-protocol-version": "2024-11-05"},
+                    headers={
+                        "Mcp-Session-Id": "mcp-session-1042",
+                        "mcp-protocol-version": "2024-11-05",
+                        "X-Agent-Id": AGENT_URN,
+                        "X-Mcp-Server-Id": MCP_SERVER_URN,
+                        "gen_ai.agent.id": AGENT_URN,
+                        "mcp.server.id": MCP_SERVER_URN
+                    },
                     timeout=5.0
                 )
                 if mcp_res.status_code == 200:
@@ -145,7 +168,9 @@ data:
                 g_headers = {
                     "Host": "generativelanguage.googleapis.com",
                     "X-Gemini-Service-Tier": "default",
+                    "X-Agent-Id": AGENT_URN,
                     "gen_ai.system": "gemini",
+                    "gen_ai.agent.id": AGENT_URN,
                     "gen_ai.request.model": "gemini-1.5-flash",
                     "gen_ai.operation.name": "generate_content",
                 }
@@ -181,6 +206,8 @@ metadata:
   namespace: ai-agent
   labels:
     app: agent-orchestrator
+    registry.gke.io/functional-type: "AGENT"
+    apphub.cloud.google.com/functional-type: "AGENT"
 spec:
   replicas: 1
   selector:
@@ -190,6 +217,8 @@ spec:
     metadata:
       labels:
         app: agent-orchestrator
+        registry.gke.io/functional-type: "AGENT"
+        apphub.cloud.google.com/functional-type: "AGENT"
     spec:
       serviceAccountName: ai-agent-sa
       containers:

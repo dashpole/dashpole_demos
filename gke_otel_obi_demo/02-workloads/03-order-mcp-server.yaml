@@ -179,6 +179,8 @@ metadata:
   namespace: ai-agent
   labels:
     app: order-mcp-server
+    registry.gke.io/functional-type: "MCP_SERVER"
+    apphub.cloud.google.com/functional-type: "MCP_SERVER"
 spec:
   replicas: 1
   selector:
@@ -188,6 +190,8 @@ spec:
     metadata:
       labels:
         app: order-mcp-server
+        registry.gke.io/functional-type: "MCP_SERVER"
+        apphub.cloud.google.com/functional-type: "MCP_SERVER"
     spec:
       containers:
         - name: mcp-server
