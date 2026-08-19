@@ -85,7 +85,7 @@ echo ""
 pause
 
 # -----------------------------------------------------------------------------
-echo -e "${BOLD}[Stage 4/7] Live Traffic Generation & In-Kernel Context Propagation${NC}"
+echo -e "${BOLD}[Stage 4/7] Live Traffic Generation & Model Context Protocol (MCP) Execution${NC}"
 # -----------------------------------------------------------------------------
 echo "Submitting customer support request through web-frontend:"
 echo -e "${CYAN}Prompt: 'What is the return policy for electronics, and can you check order #1042?'${NC}"
@@ -102,21 +102,24 @@ with urllib.request.urlopen(req, timeout=30) as r:
     elapsed = time.time() - start
     body = json.loads(r.read().decode())
     print(f"Status: HTTP {r.status} (Execution Time: {elapsed:.3f}s)")
-    print(f"\nResponse Text:\n{body.get(\"response\")}")
+    print(f"Discovered MCP Tools: {body.get(\"mcp_discovered_tools\")}")
+    print(f"Tool Execution Result: {body.get(\"mcp_tool_result\")}")
+    print(f"\nSynthesized Agent Response:\n{body.get(\"response\")}")
 '
 echo ""
-echo -e "${GREEN}✔ Request synthesized RAG Vector DB search + MCP tool execution seamlessly.${NC}"
+echo -e "${GREEN}✔ Request executed: 1) MCP Tool Discovery -> 2) Vector DB Retrieval -> 3) Tool Call (get_order_status)${NC}"
 echo ""
 pause
 
 # -----------------------------------------------------------------------------
-echo -e "${BOLD}[Stage 5/7] Google Cloud Trace & 4-Tier Distributed Waterfall${NC}"
+echo -e "${BOLD}[Stage 5/7] Google Cloud Trace: 4-Tier Distributed Waterfall & Tool Spans${NC}"
 # -----------------------------------------------------------------------------
-echo "The eBPF kernel injector injected W3C traceparent headers across all 4 tiers:"
-echo "  1. web-frontend (Port 8080 - FastAPI)"
-echo "     └── agent-orchestrator (Port 8000 - FastAPI)"
-echo "         ├── knowledge-vectordb (Port 6333 - Rust Qdrant)"
-echo "         └── order-mcp-server (Port 9000 - JSON-RPC MCP Server)"
+echo "The eBPF kernel injector stitched W3C traceparents across all tiers & tool calls:"
+echo "  POST /api/query [web-frontend]"
+echo "  └── POST /chat [agent-orchestrator]"
+echo "      ├── POST /mcp/tools/list [order-mcp-server]                 <-- MCP Tool Discovery"
+echo "      ├── POST /collections/*/points/search [knowledge-vectordb]   <-- Rust Vector DB (Qdrant)"
+echo "      └── POST /mcp/tools/call/get_order_status [order-mcp-server] <-- Tool Call Execution"
 echo ""
 echo "Open Cloud Trace in Google Cloud Console:"
 echo -e "${BOLD}https://console.cloud.google.com/traces/traces?project=${PROJECT_ID}${NC}"
@@ -126,7 +129,7 @@ pause
 # -----------------------------------------------------------------------------
 echo -e "${BOLD}[Stage 6/7] Fault Injection Scenario: Troubleshooting with OBI${NC}"
 # -----------------------------------------------------------------------------
-echo "Simulating downstream backend latency degradation in order-mcp-server..."
+echo "Simulating downstream backend latency degradation in order-mcp-server tool execution..."
 ./gke_otel_obi_demo/scripts/inject-failure.sh latency
 echo ""
 echo "Notice how latency spiked in the trace and pinpointed order-mcp-server instantly."

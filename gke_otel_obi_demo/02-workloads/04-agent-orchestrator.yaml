@@ -27,7 +27,6 @@ data:
         from vertexai.generative_models import GenerativeModel
         vertexai.init(project=PROJECT_ID, location=LOCATION)
         model = GenerativeModel("gemini-1.5-flash")
-        # Probe model to verify enablement
         print(f"Vertex AI Gemini configured for project {PROJECT_ID}", flush=True)
     except Exception as e:
         print(f"Vertex AI initialization notice: {e}", file=sys.stderr, flush=True)
@@ -65,7 +64,21 @@ data:
         body = await request.json()
         user_prompt = body.get("prompt", "")
 
-        # 1. Step 1: Semantic Retrieval from Qdrant Vector DB
+        # 1. Step 1: Model Context Protocol (MCP) Tool Discovery
+        available_tools = []
+        try:
+            async with httpx.AsyncClient() as client:
+                list_res = await client.post(
+                    "http://order-mcp-server.ai-agent.svc.cluster.local:9000/mcp/tools/list",
+                    json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    timeout=3.0
+                )
+                if list_res.status_code == 200:
+                    available_tools = list_res.json().get("result", {}).get("tools", [])
+        except Exception as e:
+            print(f"MCP tool discovery notice: {e}", file=sys.stderr, flush=True)
+
+        # 2. Step 2: Semantic Retrieval from Qdrant Vector DB
         rag_policy = "Standard products are eligible for 30-day return window. Opened electronics are accepted with original box."
         try:
             async with httpx.AsyncClient() as client:
@@ -81,7 +94,7 @@ data:
         except Exception as e:
             print(f"Vector search warning: {e}", file=sys.stderr, flush=True)
 
-        # 2. Step 2: Model Context Protocol (MCP) Tool Execution
+        # 3. Step 3: Model Context Protocol (MCP) Tool Execution
         order_data = {}
         try:
             async with httpx.AsyncClient() as client:
@@ -95,7 +108,7 @@ data:
                     }
                 }
                 mcp_res = await client.post(
-                    "http://order-mcp-server.ai-agent.svc.cluster.local:9000",
+                    "http://order-mcp-server.ai-agent.svc.cluster.local:9000/mcp/tools/call/get_order_status",
                     json=mcp_payload,
                     timeout=5.0
                 )
@@ -107,7 +120,7 @@ data:
             print(f"MCP tool call warning: {e}", file=sys.stderr, flush=True)
             order_data = {"error": str(e)}
 
-        # 3. Step 3: Synthesis with Gemini on Vertex AI or Fast Local Synthesis
+        # 4. Step 4: Synthesis with Gemini on Vertex AI or Fast Local Synthesis
         generated_text = ""
         if use_vertex and model:
             try:
@@ -123,7 +136,7 @@ data:
             except Exception as e:
                 print(f"Vertex AI unavailable ({e}), using fast local fallback", file=sys.stderr, flush=True)
                 use_vertex = False
-                generated_text = f"Order #{order_data.get('order_id', '1042')} is {order_data.get('status', 'DELIVERED')} ({order_data.get('item', 'Item')}). According to our policy: {rag_policy}"
+                generated_text = f"Order #{order_data.get('order_id', '1042')} is {order_data.get('status', 'DELIVERED')} ({order_data.get('item', 'Google Pixel 9 Pro 256GB Obsidian')}). Delivered on {order_data.get('delivered_date', '2026-08-10')}. According to our policy: {rag_policy}"
         else:
             if "error" in order_data and not order_data.get("order_id"):
                 generated_text = f"Warning: Unable to retrieve order details ({order_data.get('error')}). Policy: {rag_policy}"
@@ -132,6 +145,7 @@ data:
 
         return JSONResponse({
             "response": generated_text,
+            "mcp_discovered_tools": [t.get("name") for t in available_tools],
             "mcp_tool_result": order_data,
             "rag_policy_retrieved": rag_policy,
             "status": "success" if "error" not in order_data else "degraded"

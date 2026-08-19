@@ -20,24 +20,65 @@ data:
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(b'{"status":"ok"}')
+            elif self.path in ["/mcp/tools/list", "/tools/list"]:
+                self.handle_tools_list(1)
             else:
                 self.send_response(404)
                 self.end_headers()
 
+        def handle_tools_list(self, req_id):
+            resp = {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "tools": [
+                        {
+                            "name": "get_order_status",
+                            "description": "Look up real-time status and shipping details for a customer order.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "order_id": {"type": "string", "description": "Order reference ID (e.g. 1042)"}
+                                },
+                                "required": ["order_id"]
+                            }
+                        },
+                        {
+                            "name": "process_refund",
+                            "description": "Initiate an automated refund for an eligible returned order.",
+                            "inputSchema": {
+                                "type": "object",
+                                "properties": {
+                                    "order_id": {"type": "string"},
+                                    "amount": {"type": "number"}
+                                },
+                                "required": ["order_id", "amount"]
+                            }
+                        }
+                    ]
+                }
+            }
+            body = json.dumps(resp).encode('utf-8')
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def do_POST(self):
-            # Check for simulated failure injection
             latency = float(os.environ.get('INJECT_LATENCY', 0))
-            if latency > 0:
-                print(f"[FAULT INJECTION] Adding artificial latency of {latency}s...", flush=True)
-                time.sleep(latency)
 
             if os.environ.get('INJECT_ERROR', 'false').lower() == 'true':
                 print("[FAULT INJECTION] Emulating 500 Internal Server Error...", flush=True)
                 self.send_error(500, "Injected Database Lock Timeout in Order MCP Server")
                 return
 
+            if self.path in ["/mcp/tools/list", "/tools/list"]:
+                self.handle_tools_list(1)
+                return
+
             length = int(self.headers.get('content-length', 0))
-            req_data = self.rfile.read(length).decode('utf-8')
+            req_data = self.rfile.read(length).decode('utf-8') if length > 0 else "{}"
             try:
                 req = json.loads(req_data)
             except Exception:
@@ -47,41 +88,20 @@ data:
             method = req.get('method')
             req_id = req.get('id', 1)
 
-            if method == 'tools/list':
-                resp = {
-                    "jsonrpc": "2.0",
-                    "id": req_id,
-                    "result": {
-                        "tools": [
-                            {
-                                "name": "get_order_status",
-                                "description": "Look up real-time status and shipping details for a customer order.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "order_id": {"type": "string", "description": "Order reference ID (e.g. 1042)"}
-                                    },
-                                    "required": ["order_id"]
-                                }
-                            },
-                            {
-                                "name": "process_refund",
-                                "description": "Initiate an automated refund for an eligible returned order.",
-                                "inputSchema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "order_id": {"type": "string"},
-                                        "amount": {"type": "number"}
-                                    },
-                                    "required": ["order_id", "amount"]
-                                }
-                            }
-                        ]
-                    }
-                }
-            elif method == 'tools/call':
+            # Extract tool name from URL path if present (e.g. /mcp/tools/call/get_order_status)
+            path_parts = self.path.strip('/').split('/')
+            tool_name_from_path = path_parts[-1] if len(path_parts) >= 3 and path_parts[1] == 'tools' and path_parts[2] == 'call' else None
+
+            if method == 'tools/list' or self.path.endswith('tools/list'):
+                self.handle_tools_list(req_id)
+                return
+            elif method == 'tools/call' or 'tools/call' in self.path:
+                if latency > 0:
+                    print(f"[FAULT INJECTION] Adding artificial latency of {latency}s to tool execution...", flush=True)
+                    time.sleep(latency)
+
                 params = req.get('params', {})
-                tool_name = params.get('name')
+                tool_name = params.get('name') or tool_name_from_path or 'get_order_status'
                 arguments = params.get('arguments', {})
 
                 if tool_name == 'get_order_status':

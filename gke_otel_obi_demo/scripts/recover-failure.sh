@@ -9,8 +9,8 @@ echo "Removing fault injection environment variables..."
 kubectl set env deployment/order-mcp-server -n ai-agent INJECT_LATENCY- INJECT_ERROR-
 
 kubectl rollout status deployment/order-mcp-server -n ai-agent --timeout=60s
-# Allow short grace period for endpoint routing to switch cleanly
-sleep 4
+# Allow short grace period for endpoint routing to switch cleanly to the new healthy pod
+sleep 5
 
 echo "----------------------------------------------------------"
 echo "Sending test query to verify recovered health..."

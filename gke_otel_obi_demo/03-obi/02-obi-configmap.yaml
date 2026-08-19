@@ -47,6 +47,12 @@ data:
             gemini:
               enabled: true
     routes:
+      patterns:
+        - /mcp/tools/list
+        - /mcp/tools/call/{tool_name}
+        - /collections/{collection}/points/search
+        - /api/query
+        - /chat
       unmatched: heuristic
     attributes:
       kubernetes:
