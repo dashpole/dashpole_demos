@@ -1,0 +1,16 @@
+apiVersion: monitoring.googleapis.com/v1
+kind: PodMonitoring
+metadata:
+  name: obi-metrics
+  namespace: otel-system
+  labels:
+    app.kubernetes.io/name: obi-metrics
+    app.kubernetes.io/part-of: gke-otel-obi-demo
+spec:
+  selector:
+    matchLabels:
+      app: obi
+  endpoints:
+  - port: prom-metrics
+    interval: 10s
+    path: /metrics

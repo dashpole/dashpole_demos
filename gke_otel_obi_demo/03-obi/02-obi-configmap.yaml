@@ -21,13 +21,14 @@ data:
       batch_timeout: 100ms
       max_queue_size: 4096
     otel_metrics_export:
-      endpoint: "http://opentelemetry-collector.gke-managed-otel.svc.cluster.local:4318"
+      endpoint: "http://opentelemetry-collector.gke-managed-otel.svc.cluster.local:4317"
       insecure: true
-      protocol: http/protobuf
+      protocol: grpc
       interval: 5s
       features:
         - application
         - network
+        - application_service_graph
     ebpf:
       context_propagation: all
       track_request_headers: true
@@ -53,6 +54,10 @@ data:
     prometheus_export:
       port: 9090
       path: /metrics
+      features:
+        - application
+        - application_service_graph
+        - network
     internal_metrics:
       prometheus:
         port: 6060
