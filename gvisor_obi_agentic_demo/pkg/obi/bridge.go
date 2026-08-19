@@ -11,6 +11,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/abi"
+	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/decoders"
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ktls"
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ringbuf"
 )
@@ -64,7 +66,7 @@ func NewPipelineBridge(decorator *K8sDecorator, exporter SpanExporter) *Pipeline
 		exporter:    exporter,
 		reassembler: NewChunkReassembler(),
 		inFlightTTL: 30 * time.Second,
-		stopCh:       make(chan struct{}),
+		stopCh:      make(chan struct{}),
 	}
 	pb.cleanupWg.Add(1)
 	go pb.backgroundCleaner()
@@ -328,6 +330,7 @@ func formatHTTPName(data []byte) string {
 func parseHTTPDetails(data []byte, span *TraceSpan) {
 	reader := bufio.NewReader(bytes.NewReader(data))
 	req, err := http.ReadRequest(reader)
+	var bodyBytes []byte
 	if err == nil {
 		span.Method = req.Method
 		span.Path = req.URL.Path
@@ -347,6 +350,15 @@ func parseHTTPDetails(data []byte, span *TraceSpan) {
 				if pBytes, err := hex.DecodeString(parts[2]); err == nil && len(pBytes) == 8 {
 					copy(span.ParentSpanID[:], pBytes)
 				}
+			}
+		}
+
+		if req.Body != nil {
+			bodyBytes, _ = io.ReadAll(req.Body)
+		}
+		if len(bodyBytes) == 0 {
+			if idx := bytes.Index(data, []byte("\r\n\r\n")); idx != -1 {
+				bodyBytes = data[idx+4:]
 			}
 		}
 	} else {
@@ -374,18 +386,65 @@ func parseHTTPDetails(data []byte, span *TraceSpan) {
 				}
 			}
 		}
+		// Try to find body separator
+		if idx := bytes.Index(data, []byte("\r\n\r\n")); idx != -1 {
+			bodyBytes = data[idx+4:]
+		}
+	}
+
+	// 1. Vector DB semantic extraction
+	if vDetails, ok := decoders.ParseVectorDBRequest(span.Path, bodyBytes); ok {
+		span.Attributes["db.system"] = vDetails.System
+		span.Attributes["db.collection.name"] = vDetails.CollectionName
+		span.Attributes["db.operation"] = vDetails.Operation
+		if vDetails.VectorDim > 0 {
+			span.Attributes["db.vector.dimension"] = strconv.Itoa(vDetails.VectorDim)
+		}
+		if vDetails.TopK > 0 {
+			span.Attributes["db.vector.top_k"] = strconv.Itoa(vDetails.TopK)
+		}
+		if vDetails.ScoreThreshold > 0 {
+			span.Attributes["db.vector.score_threshold"] = fmt.Sprintf("%.2f", vDetails.ScoreThreshold)
+		}
+		if vDetails.HasFilter {
+			span.Attributes["db.vector.has_filter"] = "true"
+		}
+	}
+
+	// 2. Model Context Protocol (MCP) JSON-RPC extraction
+	if len(bodyBytes) > 0 {
+		if mcpDetails, ok := decoders.ParseMCPRequest(bodyBytes); ok {
+			span.Attributes["mcp.method.name"] = mcpDetails.MethodName
+			if mcpDetails.ToolName != "" {
+				span.ToolName = mcpDetails.ToolName
+				span.Attributes["gen_ai.tool.name"] = mcpDetails.ToolName
+			}
+			if mcpDetails.ToolArguments != "" {
+				span.ToolArgs = mcpDetails.ToolArguments
+				span.Attributes["gen_ai.tool.call.arguments"] = mcpDetails.ToolArguments
+			}
+		}
 	}
 }
 
 func parseHTTPResponseDetails(data []byte, span *TraceSpan) {
 	reader := bufio.NewReader(bytes.NewReader(data))
 	resp, err := http.ReadResponse(reader, nil)
+	var bodyBytes []byte
 	if err == nil {
 		span.HTTPStatus = resp.StatusCode
 		span.StatusCode = resp.StatusCode
 		span.Attributes["http.response.status_code"] = strconv.Itoa(resp.StatusCode)
 		if resp.StatusCode >= 400 {
 			span.StatusMsg = resp.Status
+		}
+		if resp.Body != nil {
+			bodyBytes, _ = io.ReadAll(resp.Body)
+		}
+		if len(bodyBytes) == 0 {
+			if idx := bytes.Index(data, []byte("\r\n\r\n")); idx != -1 {
+				bodyBytes = data[idx+4:]
+			}
 		}
 	} else {
 		// Fallback
@@ -395,6 +454,45 @@ func parseHTTPResponseDetails(data []byte, span *TraceSpan) {
 				span.HTTPStatus = code
 				span.StatusCode = code
 				span.Attributes["http.response.status_code"] = parts[1]
+			}
+		}
+		if idx := bytes.Index(data, []byte("\r\n\r\n")); idx != -1 {
+			bodyBytes = data[idx+4:]
+		}
+	}
+
+	// 1. Server-Sent Events (SSE) LLM streaming extraction
+	if strings.Contains(string(data), "data:") {
+		sseDec := decoders.NewSSEDecoder(span.StartTime)
+		metrics := sseDec.IngestChunk(data, span.EndTime)
+		if metrics.ModelName != "" {
+			span.ModelName = metrics.ModelName
+			span.Attributes["gen_ai.response.model"] = metrics.ModelName
+		}
+		if metrics.PromptTokens > 0 {
+			span.PromptTokens = metrics.PromptTokens
+			span.Attributes["gen_ai.usage.input_tokens"] = strconv.Itoa(metrics.PromptTokens)
+		}
+		if metrics.OutputTokens > 0 {
+			span.OutputTokens = metrics.OutputTokens
+			span.Attributes["gen_ai.usage.output_tokens"] = strconv.Itoa(metrics.OutputTokens)
+		}
+		if metrics.TotalTokens > 0 {
+			span.TotalTokens = metrics.TotalTokens
+		}
+		if metrics.TimeToFirstTok > 0 {
+			span.TimeToFirstTok = metrics.TimeToFirstTok
+			span.Attributes["gen_ai.time_to_first_token_ms"] = fmt.Sprintf("%.2f", float64(metrics.TimeToFirstTok.Microseconds())/1000.0)
+		}
+	}
+
+	// 2. MCP JSON-RPC Response extraction
+	if len(bodyBytes) > 0 {
+		if mcpResp, ok := decoders.ParseMCPResponse(bodyBytes); ok {
+			if mcpResp.IsError {
+				span.Attributes["gen_ai.tool.call.error"] = mcpResp.ErrorMessage
+			} else if mcpResp.ToolResult != "" {
+				span.Attributes["gen_ai.tool.call.result"] = mcpResp.ToolResult
 			}
 		}
 	}
