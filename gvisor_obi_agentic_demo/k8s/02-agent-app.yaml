@@ -1,0 +1,193 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: agentic-demo
+---
+# 1. Qdrant Vector Database
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: qdrant-vector-db
+  namespace: agentic-demo
+  labels:
+    app: qdrant
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: qdrant
+  template:
+    metadata:
+      labels:
+        app: qdrant
+    spec:
+      runtimeClassName: gvisor
+      containers:
+        - name: qdrant
+          image: qdrant/qdrant:v1.9.0
+          ports:
+            - containerPort: 6333
+              name: http
+            - containerPort: 6334
+              name: grpc
+          resources:
+            requests:
+              cpu: 200m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: qdrant
+  namespace: agentic-demo
+spec:
+  selector:
+    app: qdrant
+  ports:
+    - port: 6333
+      targetPort: 6333
+      name: http
+    - port: 6334
+      targetPort: 6334
+      name: grpc
+---
+# 2. MCP SQLite Tool Server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mcp-tool-server
+  namespace: agentic-demo
+  labels:
+    app: mcp-tool
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mcp-tool
+  template:
+    metadata:
+      labels:
+        app: mcp-tool
+    spec:
+      runtimeClassName: gvisor
+      containers:
+        - name: mcp-server
+          image: python:3.11-slim
+          command: ["python3", "-m", "http.server", "8080"]
+          ports:
+            - containerPort: 8080
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mcp-tool-server
+  namespace: agentic-demo
+spec:
+  selector:
+    app: mcp-tool
+  ports:
+    - port: 8080
+      targetPort: 8080
+      name: http
+---
+# 3. Agent Orchestrator
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-orchestrator
+  namespace: agentic-demo
+  labels:
+    app: agent-orchestrator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agent-orchestrator
+  template:
+    metadata:
+      labels:
+        app: agent-orchestrator
+    spec:
+      runtimeClassName: gvisor
+      containers:
+        - name: orchestrator
+          image: python:3.11-slim
+          command: ["python3", "-m", "http.server", "9000"]
+          env:
+            - name: QDRANT_URL
+              value: "http://qdrant.agentic-demo.svc.cluster.local:6333"
+            - name: MCP_SERVER_URL
+              value: "http://mcp-tool-server.agentic-demo.svc.cluster.local:8080"
+          ports:
+            - containerPort: 9000
+              name: http
+          resources:
+            requests:
+              cpu: 250m
+              memory: 256Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-orchestrator
+  namespace: agentic-demo
+spec:
+  selector:
+    app: agent-orchestrator
+  ports:
+    - port: 9000
+      targetPort: 9000
+      name: http
+---
+# 4. Frontend UI
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-ui
+  namespace: agentic-demo
+  labels:
+    app: frontend-ui
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend-ui
+  template:
+    metadata:
+      labels:
+        app: frontend-ui
+    spec:
+      runtimeClassName: gvisor
+      containers:
+        - name: frontend
+          image: python:3.11-slim
+          command: ["python3", "-m", "http.server", "80"]
+          env:
+            - name: AGENT_ORCHESTRATOR_URL
+              value: "http://agent-orchestrator.agentic-demo.svc.cluster.local:9000"
+          ports:
+            - containerPort: 80
+              name: http
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-ui
+  namespace: agentic-demo
+spec:
+  type: ClusterIP
+  selector:
+    app: frontend-ui
+  ports:
+    - port: 80
+      targetPort: 80
+      name: http

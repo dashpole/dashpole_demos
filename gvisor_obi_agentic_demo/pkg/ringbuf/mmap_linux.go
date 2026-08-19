@@ -8,6 +8,7 @@ package ringbuf
 import (
 	"fmt"
 	"os"
+	"syscall"
 	"unsafe"
 
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/abi"
@@ -64,12 +65,12 @@ func CreateAndMapSharedRing(path string, dataSize uint64, writable bool) (*Mappe
 	totalVirtualSize := uintptr(abi.ControlHeaderSize + 2*dataSize)
 
 	// Step 1: Reserve continuous virtual address space
-	reserveAddr, _, errno := unix.Syscall6(
-		unix.SYS_MMAP,
+	r1, _, errno := syscall.Syscall6(
+		syscall.SYS_MMAP,
 		0,
 		totalVirtualSize,
-		uintptr(unix.PROT_NONE),
-		uintptr(unix.MAP_ANONYMOUS|unix.MAP_PRIVATE),
+		uintptr(syscall.PROT_NONE),
+		uintptr(syscall.MAP_ANONYMOUS|syscall.MAP_PRIVATE),
 		^uintptr(0),
 		0,
 	)
@@ -77,6 +78,8 @@ func CreateAndMapSharedRing(path string, dataSize uint64, writable bool) (*Mappe
 		file.Close()
 		return nil, fmt.Errorf("failed to reserve virtual address space of size %d: %v", totalVirtualSize, errno)
 	}
+	reserveAddr := r1
+	basePtr := *(*unsafe.Pointer)(unsafe.Pointer(&reserveAddr))
 
 	prot := uintptr(unix.PROT_READ | unix.PROT_WRITE)
 
@@ -130,11 +133,13 @@ func CreateAndMapSharedRing(path string, dataSize uint64, writable bool) (*Mappe
 		return nil, fmt.Errorf("failed to map second data ring copy: %v", errno)
 	}
 
-	// Construct Go slice over the double-mapped data ring
-	dataSlice := unsafe.Slice((*byte)(unsafe.Pointer(data1Addr)), int(2*dataSize))
+	data1Ptr := unsafe.Add(basePtr, abi.ControlHeaderSize)
 
-	consumerPtr := (*uint64)(unsafe.Pointer(reserveAddr))
-	producerPtr := (*uint64)(unsafe.Pointer(reserveAddr + uintptr(abi.PageSize)))
+	// Construct Go slice over the double-mapped data ring
+	dataSlice := unsafe.Slice((*byte)(data1Ptr), int(2*dataSize))
+
+	consumerPtr := (*uint64)(basePtr)
+	producerPtr := (*uint64)(unsafe.Add(basePtr, abi.PageSize))
 
 	return &MappedRing{
 		BaseAddr:      reserveAddr,
