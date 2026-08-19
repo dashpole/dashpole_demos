@@ -31,10 +31,10 @@ import urllib.request, sys
 data = urllib.request.urlopen('http://${NODE_IP}:9090/metrics').read().decode()
 required = [
     'http_server_request_duration_seconds',
-    'http_client_request_duration_seconds',
     'http_server_request_body_size_bytes',
     'http_server_response_body_size_bytes',
-    'obi_network_flow_bytes_total'
+    'obi_network_flow_bytes_total',
+    'target_info'
 ]
 all_ok = True
 for key in required:

@@ -54,11 +54,6 @@ data:
               enabled: true
     routes:
       patterns:
-        - /mcp/tools/list
-        - /mcp/tools/call/{tool_name}
-        - /collections/{collection}/points/search
-        - /v1beta/models/{model}:generateContent
-        - /v1/chat/completions
         - /api/query
         - /chat
       unmatched: heuristic
@@ -70,6 +65,7 @@ data:
           include:
             - "*"
             - "gen_ai.*"
+            - "mcp.*"
             - "rpc.*"
             - "db.*"
             - "http.*"
@@ -79,6 +75,7 @@ data:
           include:
             - "*"
             - "gen_ai.*"
+            - "mcp.*"
             - "rpc.*"
             - "db.*"
             - "http.*"

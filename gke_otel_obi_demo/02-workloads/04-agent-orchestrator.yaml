@@ -63,6 +63,7 @@ data:
                 list_res = await client.post(
                     "http://order-mcp-server.ai-agent.svc.cluster.local:9000/mcp/tools/list",
                     json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+                    headers={"Mcp-Session-Id": "mcp-session-1042", "mcp-protocol-version": "2024-11-05"},
                     timeout=3.0
                 )
                 if list_res.status_code == 200:
@@ -102,6 +103,7 @@ data:
                 mcp_res = await client.post(
                     "http://order-mcp-server.ai-agent.svc.cluster.local:9000/mcp/tools/call/get_order_status",
                     json=mcp_payload,
+                    headers={"Mcp-Session-Id": "mcp-session-1042", "mcp-protocol-version": "2024-11-05"},
                     timeout=5.0
                 )
                 if mcp_res.status_code == 200:
@@ -141,6 +143,8 @@ data:
             }
             async with httpx.AsyncClient() as client:
                 g_headers = {
+                    "Host": "generativelanguage.googleapis.com",
+                    "X-Gemini-Service-Tier": "default",
                     "gen_ai.system": "gemini",
                     "gen_ai.request.model": "gemini-1.5-flash",
                     "gen_ai.operation.name": "generate_content",

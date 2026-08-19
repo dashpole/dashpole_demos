@@ -7,6 +7,7 @@ metadata:
     app: web-frontend
 data:
   frontend.py: |
+    import os
     import httpx
     from fastapi import FastAPI, Request
     from fastapi.responses import HTMLResponse, JSONResponse
@@ -102,13 +103,31 @@ data:
     @app.post("/api/query")
     async def proxy_query(request: Request):
         payload = await request.json()
+        traceparent = request.headers.get("traceparent")
+        if not traceparent:
+            trace_id = os.urandom(16).hex()
+            span_id = os.urandom(8).hex()
+            traceparent = f"00-{trace_id}-{span_id}-01"
+        else:
+            parts = traceparent.split("-")
+            trace_id = parts[1] if len(parts) > 1 else os.urandom(16).hex()
+
+        headers = {"traceparent": traceparent}
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 "http://agent-orchestrator.ai-agent.svc.cluster.local:8000/chat",
                 json=payload,
+                headers=headers,
                 timeout=25.0
             )
-            return JSONResponse(content=resp.json(), status_code=resp.status_code)
+            data = resp.json()
+            data["trace_id"] = trace_id
+            data["cloud_trace_url"] = f"https://console.cloud.google.com/traces/viewer?project=dashpole-dev&tid={trace_id}"
+            return JSONResponse(
+                content=data,
+                status_code=resp.status_code,
+                headers={"traceparent": traceparent, "X-Trace-Id": trace_id}
+            )
 ---
 apiVersion: apps/v1
 kind: Deployment

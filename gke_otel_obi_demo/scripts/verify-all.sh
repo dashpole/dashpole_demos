@@ -74,17 +74,22 @@ else
 fi
 
 # -----------------------------------------------------------------------------
-echo "[4/6] Testing Milestone 4: In-Kernel Context Propagation & Distributed Traces..."
+echo "[4/7] Testing Milestone 4: In-Kernel Context Propagation & Distributed Traces..."
 # -----------------------------------------------------------------------------
 ./gke_otel_obi_demo/scripts/test-context-propagation.sh
 
 # -----------------------------------------------------------------------------
-echo "[5/6] Testing Milestone 5: MCP/VectorDB Telemetry & Cloud Monitoring RED..."
+echo "[5/7] Testing GenAI & MCP Semantic Conventions Verification in Cloud Trace..."
+# -----------------------------------------------------------------------------
+./gke_otel_obi_demo/scripts/verify-genai-spans.sh
+
+# -----------------------------------------------------------------------------
+echo "[6/7] Testing Milestone 5: MCP/VectorDB Telemetry & Cloud Monitoring RED..."
 # -----------------------------------------------------------------------------
 ./gke_otel_obi_demo/scripts/verify-milestone5.sh
 
 # -----------------------------------------------------------------------------
-echo "[6/6] Testing Milestone 6: Fault Injection & Recovery Lifecycle..."
+echo "[7/7] Testing Milestone 6: Fault Injection & Recovery Lifecycle..."
 # -----------------------------------------------------------------------------
 ./gke_otel_obi_demo/scripts/inject-failure.sh latency
 ./gke_otel_obi_demo/scripts/recover-failure.sh
