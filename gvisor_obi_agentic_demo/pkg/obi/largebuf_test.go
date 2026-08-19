@@ -6,10 +6,13 @@ package obi
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"io"
+	"path/filepath"
 	"testing"
 
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/abi"
+	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ringbuf"
 )
 
 func TestLargeBuffer_MultiChunk(t *testing.T) {
@@ -81,4 +84,101 @@ func TestChunkReassembler_Lifecycle(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestRingBuf_LargeBufReassembly(t *testing.T) {
+	dir := t.TempDir()
+	shmPath := filepath.Join(dir, "largebuf.shm")
+
+	sink, err := ringbuf.NewRingBufSink(ringbuf.SinkConfig{
+		FilePath:      shmPath,
+		DataSizeBytes: 4 * 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("NewRingBufSink failed: %v", err)
+	}
+	defer sink.Close()
+
+	reader, err := ringbuf.NewRingBufReader(ringbuf.ReaderConfig{
+		FilePath:      shmPath,
+		DataSizeBytes: 4 * 1024 * 1024,
+	})
+	if err != nil {
+		t.Fatalf("NewRingBufReader failed: %v", err)
+	}
+	defer reader.Close()
+
+	reassembler := NewChunkReassembler()
+
+	// Simulate a 128KB GenAI prompt chunked into 16KB records
+	totalPromptSize := 128 * 1024
+	prompt := make([]byte, totalPromptSize)
+	_, _ = rand.Read(prompt)
+
+	chunkSize := 16 * 1024
+	streamID := uint64(42)
+
+	// Write chunks to ring buffer
+	numChunks := totalPromptSize / chunkSize
+	for i := 0; i < numChunks; i++ {
+		start := i * chunkSize
+		end := start + chunkSize
+		chunkData := prompt[start:end]
+
+		var flags uint16
+		if i == 0 {
+			flags = abi.ChunkFlagStart
+		} else if i == numChunks-1 {
+			flags = abi.ChunkFlagEnd
+		} else {
+			flags = abi.ChunkFlagCont
+		}
+
+		wirePayload := make([]byte, 8+len(chunkData))
+		binary.LittleEndian.PutUint64(wirePayload[0:8], streamID)
+		copy(wirePayload[8:], chunkData)
+
+		sink.ReserveAndCommit(abi.MsgTypeKTLSTx, flags, wirePayload)
+	}
+
+	// Consume and reassemble
+	var assembledBuf *LargeBuffer
+	var completed bool
+
+	for {
+		var rec ringbuf.Record
+		ok, err := reader.ReadRecord(&rec)
+		if err != nil {
+			t.Fatalf("ReadRecord failed: %v", err)
+		}
+		if !ok {
+			break
+		}
+
+		sID := binary.LittleEndian.Uint64(rec.Payload[0:8])
+		chunkPayload := rec.Payload[8:]
+
+		buf, done, err := reassembler.IngestChunk(sID, rec.Flags, chunkPayload)
+		if err != nil {
+			t.Fatalf("IngestChunk error: %v", err)
+		}
+		if done {
+			assembledBuf = buf
+			completed = true
+			break
+		}
+	}
+
+	if !completed || assembledBuf == nil {
+		t.Fatalf("LargeBuffer reassembly failed to complete")
+	}
+
+	if assembledBuf.Len() != totalPromptSize {
+		t.Fatalf("Reassembled length mismatch: expected %d, got %d", totalPromptSize, assembledBuf.Len())
+	}
+
+	if !bytes.Equal(assembledBuf.Bytes(), prompt) {
+		t.Fatalf("Reassembled prompt content mismatch with original 128KB payload")
+	}
+	t.Logf("LargeBuffer successfully reassembled %d-byte prompt across %d chunks", totalPromptSize, numChunks)
 }

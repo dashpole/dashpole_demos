@@ -5,54 +5,61 @@ package obi
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/abi"
 )
 
-// LargeBuffer assembles chunked ring-buffer events into a contiguous byte stream.
-// Modeled after go.opentelemetry.io/obi/pkg/internal/largebuf.
+var (
+	ErrStreamTooLarge = errors.New("largebuf: stream exceeds maximum allowed buffer size")
+	ErrChunkOutOfOrder = errors.New("largebuf: chunk received out of sequence")
+)
+
+const (
+	// DefaultMaxStreamSize limits single multi-chunk stream to 32MB to prevent memory exhaustion
+	DefaultMaxStreamSize = 32 * 1024 * 1024
+	// DefaultStreamTTL is the maximum inactivity duration before abandoned streams are evicted
+	DefaultStreamTTL = 60 * time.Second
+)
+
+// LargeBuffer represents a multi-chunk reassembled payload.
 type LargeBuffer struct {
-	chunks [][]byte
-	total  int
+	chunks     [][]byte
+	totalLen   int
+	lastActive time.Time
 }
 
-// NewLargeBuffer returns an empty LargeBuffer.
+// NewLargeBuffer initializes an empty LargeBuffer.
 func NewLargeBuffer() *LargeBuffer {
 	return &LargeBuffer{
-		chunks: make([][]byte, 0, 4),
+		chunks:     make([][]byte, 0, 8),
+		totalLen:   0,
+		lastActive: time.Now(),
 	}
 }
 
-// NewLargeBufferFrom wraps b as a single-chunk LargeBuffer without unnecessary allocation.
-func NewLargeBufferFrom(b []byte) *LargeBuffer {
-	copied := make([]byte, len(b))
-	copy(copied, b)
-	return &LargeBuffer{
-		chunks: [][]byte{copied},
-		total:  len(b),
-	}
-}
-
-// AppendChunk appends a byte slice, copying into Go-owned memory.
-func (lb *LargeBuffer) AppendChunk(data []byte) {
-	if len(data) == 0 {
+// AppendChunk adds a chunk slice to the buffer.
+func (lb *LargeBuffer) AppendChunk(chunk []byte) {
+	if len(chunk) == 0 {
 		return
 	}
-	buf := make([]byte, len(data))
-	copy(buf, data)
-	lb.chunks = append(lb.chunks, buf)
-	lb.total += len(data)
+	cp := make([]byte, len(chunk))
+	copy(cp, chunk)
+	lb.chunks = append(lb.chunks, cp)
+	lb.totalLen += len(chunk)
+	lb.lastActive = time.Now()
 }
 
-// Len returns total assembled bytes.
+// Len returns total assembled byte length.
 func (lb *LargeBuffer) Len() int {
-	return lb.total
+	return lb.totalLen
 }
 
-// Bytes returns the complete contiguous byte slice.
+// Bytes returns a contiguous byte slice of the assembled payload.
 func (lb *LargeBuffer) Bytes() []byte {
 	if len(lb.chunks) == 0 {
 		return nil
@@ -60,23 +67,17 @@ func (lb *LargeBuffer) Bytes() []byte {
 	if len(lb.chunks) == 1 {
 		return lb.chunks[0]
 	}
-	res := make([]byte, lb.total)
-	off := 0
+	res := make([]byte, lb.totalLen)
+	offset := 0
 	for _, c := range lb.chunks {
-		copy(res[off:], c)
-		off += len(c)
+		copy(res[offset:], c)
+		offset += len(c)
 	}
 	return res
 }
 
-// Reader returns an io.Reader over the chunks.
+// Reader returns an io.Reader over the chunked buffer without copying memory.
 func (lb *LargeBuffer) Reader() io.Reader {
-	if len(lb.chunks) == 0 {
-		return bytes.NewReader(nil)
-	}
-	if len(lb.chunks) == 1 {
-		return bytes.NewReader(lb.chunks[0])
-	}
 	readers := make([]io.Reader, len(lb.chunks))
 	for i, c := range lb.chunks {
 		readers[i] = bytes.NewReader(c)
@@ -84,52 +85,69 @@ func (lb *LargeBuffer) Reader() io.Reader {
 	return io.MultiReader(readers...)
 }
 
-// ChunkReassembler manages active in-flight multi-chunk payload streams.
+// ChunkReassembler manages active in-flight multi-chunk payload reassemblies.
 type ChunkReassembler struct {
-	mu      sync.Mutex
-	streams map[uint64]*LargeBuffer
+	mu            sync.Mutex
+	streams       map[uint64]*LargeBuffer
+	maxStreamSize int
+	streamTTL     time.Duration
 }
 
-// NewChunkReassembler creates a new reassembly manager.
+// NewChunkReassembler creates a new reassembler.
 func NewChunkReassembler() *ChunkReassembler {
 	return &ChunkReassembler{
-		streams: make(map[uint64]*LargeBuffer),
+		streams:       make(map[uint64]*LargeBuffer),
+		maxStreamSize: DefaultMaxStreamSize,
+		streamTTL:     DefaultStreamTTL,
 	}
 }
 
-// IngestChunk processes a record chunk. Returns (buffer, isComplete, error).
-func (cr *ChunkReassembler) IngestChunk(streamID uint64, flags uint16, payload []byte) (*LargeBuffer, bool, error) {
+// IngestChunk processes a single chunk record for a streamID.
+func (cr *ChunkReassembler) IngestChunk(streamID uint64, flags uint16, chunk []byte) (*LargeBuffer, bool, error) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
 
-	switch flags {
-	case abi.ChunkFlagSingle:
-		return NewLargeBufferFrom(payload), true, nil
+	// Evict stale streams periodically
+	now := time.Now()
+	for sID, stream := range cr.streams {
+		if now.Sub(stream.lastActive) > cr.streamTTL {
+			delete(cr.streams, sID)
+		}
+	}
 
-	case abi.ChunkFlagStart:
-		buf := NewLargeBuffer()
-		buf.AppendChunk(payload)
+	if flags == abi.ChunkFlagSingle {
+		lb := NewLargeBuffer()
+		lb.AppendChunk(chunk)
+		return lb, true, nil
+	}
+
+	buf, exists := cr.streams[streamID]
+	if !exists {
+		if flags != abi.ChunkFlagStart {
+			return nil, false, fmt.Errorf("%w: missing start chunk for stream %d", ErrChunkOutOfOrder, streamID)
+		}
+		buf = NewLargeBuffer()
 		cr.streams[streamID] = buf
-		return nil, false, nil
+	}
 
-	case abi.ChunkFlagCont:
-		buf, exists := cr.streams[streamID]
-		if !exists {
-			return nil, false, fmt.Errorf("received continuation chunk for unknown stream ID %d", streamID)
-		}
-		buf.AppendChunk(payload)
-		return nil, false, nil
+	if buf.Len()+len(chunk) > cr.maxStreamSize {
+		delete(cr.streams, streamID)
+		return nil, false, fmt.Errorf("%w: stream %d size %d > max %d", ErrStreamTooLarge, streamID, buf.Len()+len(chunk), cr.maxStreamSize)
+	}
 
-	case abi.ChunkFlagEnd:
-		buf, exists := cr.streams[streamID]
-		if !exists {
-			return nil, false, fmt.Errorf("received end chunk for unknown stream ID %d", streamID)
-		}
-		buf.AppendChunk(payload)
+	buf.AppendChunk(chunk)
+
+	if flags&abi.ChunkFlagEnd != 0 {
 		delete(cr.streams, streamID)
 		return buf, true, nil
-
-	default:
-		return NewLargeBufferFrom(payload), true, nil
 	}
+
+	return nil, false, nil
+}
+
+// StreamCount returns the number of currently active in-flight streams.
+func (cr *ChunkReassembler) StreamCount() int {
+	cr.mu.Lock()
+	defer cr.mu.Unlock()
+	return len(cr.streams)
 }

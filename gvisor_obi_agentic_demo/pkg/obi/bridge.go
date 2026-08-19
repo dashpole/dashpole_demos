@@ -1,0 +1,408 @@
+// Copyright 2026 The OpenTelemetry Authors / Google LLC
+// SPDX-License-Identifier: Apache-2.0
+
+package obi
+
+import (
+	"bufio"
+	"bytes"
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/hex"
+	"fmt"
+	"hash/fnv"
+	"net/http"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/abi"
+	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ktls"
+	"github.com/dashpole/dashpole_demos/gvisor_obi_agentic_demo/pkg/ringbuf"
+)
+
+// ConnKey identifies a bidirectional TCP connection within a container sandbox.
+type ConnKey struct {
+	ContainerID string
+	SrcIP       string
+	SrcPort     uint16
+	DstIP       string
+	DstPort     uint16
+}
+
+// InFlightTxRx tracks a request/response transaction.
+type InFlightTxRx struct {
+	Span      *TraceSpan
+	CreatedAt time.Time
+}
+
+// SpanExporter interface for exporting completed spans.
+type SpanExporter interface {
+	ExportSpan(span *TraceSpan) error
+}
+
+// PipelineBridge converts gVisor ring buffer events into OpenTelemetry spans.
+type PipelineBridge struct {
+	mu           sync.Mutex
+	inFlight     map[ConnKey]*InFlightTxRx
+	decorator    *K8sDecorator
+	exporter     SpanExporter
+	reassembler  *ChunkReassembler
+	spansEmitted atomic.Uint64
+	inFlightTTL  time.Duration
+	stopCh       chan struct{}
+	cleanupWg    sync.WaitGroup
+}
+
+// NewPipelineBridge creates a new PipelineBridge instance with background TTL cleanup.
+func NewPipelineBridge(decorator *K8sDecorator, exporter SpanExporter) *PipelineBridge {
+	pb := &PipelineBridge{
+		inFlight:    make(map[ConnKey]*InFlightTxRx),
+		decorator:   decorator,
+		exporter:    exporter,
+		reassembler: NewChunkReassembler(),
+		inFlightTTL: 30 * time.Second,
+		stopCh:       make(chan struct{}),
+	}
+	pb.cleanupWg.Add(1)
+	go pb.backgroundCleaner()
+	return pb
+}
+
+// Close gracefully stops the background cleanup worker.
+func (pb *PipelineBridge) Close() {
+	close(pb.stopCh)
+	pb.cleanupWg.Wait()
+}
+
+// backgroundCleaner removes stale in-flight transactions periodically off the hot path.
+func (pb *PipelineBridge) backgroundCleaner() {
+	defer pb.cleanupWg.Done()
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-pb.stopCh:
+			return
+		case <-ticker.C:
+			pb.SweepStaleInFlight()
+		}
+	}
+}
+
+// SweepStaleInFlight removes transactions that exceeded the inFlightTTL.
+func (pb *PipelineBridge) SweepStaleInFlight() {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	now := time.Now()
+	for k, inF := range pb.inFlight {
+		if now.Sub(inF.CreatedAt) > pb.inFlightTTL {
+			delete(pb.inFlight, k)
+		}
+	}
+}
+
+// ComputeStreamID calculates a collision-free 64-bit stream identifier.
+func ComputeStreamID(containerID string, tuple ktls.SocketTuple, pid uint32) uint64 {
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(containerID))
+	_, _ = h.Write(tuple.SrcIP)
+	_ = binary.Write(h, binary.BigEndian, tuple.SrcPort)
+	_, _ = h.Write(tuple.DstIP)
+	_ = binary.Write(h, binary.BigEndian, tuple.DstPort)
+	_ = binary.Write(h, binary.BigEndian, pid)
+	return h.Sum64()
+}
+
+// ProcessRecord parses a single ring buffer record in O(1) time.
+func (pb *PipelineBridge) ProcessRecord(containerID string, rec ringbuf.Record) error {
+	tuple, pid, tid, tsNS, payload, ok := ktls.DeserializeTelemetryEvent(rec.Payload)
+	if !ok {
+		return fmt.Errorf("failed to deserialize telemetry event")
+	}
+
+	// Handle multi-chunk reassembly if chunk flags are set
+	if rec.Flags != abi.ChunkFlagSingle {
+		streamID := ComputeStreamID(containerID, tuple, pid)
+		buf, done, err := pb.reassembler.IngestChunk(streamID, rec.Flags, payload)
+		if err != nil {
+			return err
+		}
+		if !done || buf == nil {
+			return nil
+		}
+		payload = buf.Bytes()
+	}
+
+	eventTime := time.Unix(0, int64(tsNS))
+	if tsNS == 0 {
+		eventTime = time.Now()
+	}
+
+	key := ConnKey{
+		ContainerID: containerID,
+		SrcIP:       tuple.SrcIP.String(),
+		SrcPort:     tuple.SrcPort,
+		DstIP:       tuple.DstIP.String(),
+		DstPort:     tuple.DstPort,
+	}
+
+	revKey := ConnKey{
+		ContainerID: containerID,
+		SrcIP:       tuple.DstIP.String(),
+		SrcPort:     tuple.DstPort,
+		DstIP:       tuple.SrcIP.String(),
+		DstPort:     tuple.SrcPort,
+	}
+
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+
+	now := time.Now()
+
+	switch rec.MsgType {
+	case abi.MsgTypeKTLSTx:
+		// Outbound write: Request or Response
+		if isHTTPRequest(payload) {
+			// Outbound client request
+			span := NewTraceSpan(formatHTTPName(payload), SpanKindClient)
+			span.StartTime = eventTime
+			span.SrcIP = tuple.SrcIP
+			span.SrcPort = tuple.SrcPort
+			span.DstIP = tuple.DstIP
+			span.DstPort = tuple.DstPort
+			span.PID = pid
+			span.TID = tid
+			span.ContainerID = containerID
+			span.ReqBytes = len(payload)
+
+			_, _ = rand.Read(span.TraceID[:])
+			_, _ = rand.Read(span.SpanID[:])
+
+			parseHTTPDetails(payload, span)
+
+			pb.inFlight[key] = &InFlightTxRx{
+				Span:      span,
+				CreatedAt: now,
+			}
+		} else if isHTTPResponse(payload) {
+			// Outbound server response completing an incoming server request (SpanKindServer)
+			matchKey, inFlight := pb.findMatchingSpan(key, revKey, SpanKindServer)
+			if inFlight != nil {
+				span := inFlight.Span
+				span.EndTime = eventTime
+				span.Duration = span.EndTime.Sub(span.StartTime)
+				span.RespBytes = len(payload)
+				parseHTTPResponseDetails(payload, span)
+
+				delete(pb.inFlight, matchKey)
+
+				if pb.decorator != nil {
+					pb.decorator.DecorateSpan(span)
+				}
+				if pb.exporter != nil {
+					_ = pb.exporter.ExportSpan(span)
+				}
+				pb.spansEmitted.Add(1)
+			}
+		}
+
+	case abi.MsgTypeKTLSRx:
+		// Inbound read: Request or Response
+		if isHTTPRequest(payload) {
+			// Inbound server request received
+			span := NewTraceSpan(formatHTTPName(payload), SpanKindServer)
+			span.StartTime = eventTime
+			span.SrcIP = tuple.SrcIP
+			span.SrcPort = tuple.SrcPort
+			span.DstIP = tuple.DstIP
+			span.DstPort = tuple.DstPort
+			span.PID = pid
+			span.TID = tid
+			span.ContainerID = containerID
+			span.ReqBytes = len(payload)
+
+			_, _ = rand.Read(span.TraceID[:])
+			_, _ = rand.Read(span.SpanID[:])
+
+			parseHTTPDetails(payload, span)
+
+			pb.inFlight[key] = &InFlightTxRx{
+				Span:      span,
+				CreatedAt: now,
+			}
+		} else if isHTTPResponse(payload) {
+			// Inbound client response received completing an outbound client request (SpanKindClient)
+			matchKey, inFlight := pb.findMatchingSpan(key, revKey, SpanKindClient)
+			if inFlight != nil {
+				span := inFlight.Span
+				span.EndTime = eventTime
+				span.Duration = span.EndTime.Sub(span.StartTime)
+				span.RespBytes = len(payload)
+				parseHTTPResponseDetails(payload, span)
+
+				delete(pb.inFlight, matchKey)
+
+				if pb.decorator != nil {
+					pb.decorator.DecorateSpan(span)
+				}
+				if pb.exporter != nil {
+					_ = pb.exporter.ExportSpan(span)
+				}
+				pb.spansEmitted.Add(1)
+			}
+		}
+	}
+
+	return nil
+}
+
+// findMatchingSpan searches for the corresponding in-flight transaction with preferred SpanKind.
+func (pb *PipelineBridge) findMatchingSpan(key, revKey ConnKey, preferredKind SpanKind) (ConnKey, *InFlightTxRx) {
+	// First check direct key
+	if inF, exists := pb.inFlight[key]; exists && inF.Span.Kind == preferredKind {
+		return key, inF
+	}
+	// Next check reverse key
+	if inF, exists := pb.inFlight[revKey]; exists && inF.Span.Kind == preferredKind {
+		return revKey, inF
+	}
+	// Fallback check direct key (any kind)
+	if inF, exists := pb.inFlight[key]; exists {
+		return key, inF
+	}
+	// Fallback check reverse key (any kind)
+	if inF, exists := pb.inFlight[revKey]; exists {
+		return revKey, inF
+	}
+	return key, nil
+}
+
+// SpansEmitted returns total spans processed and exported.
+func (pb *PipelineBridge) SpansEmitted() uint64 {
+	return pb.spansEmitted.Load()
+}
+
+// InFlightCount returns current in-flight connection tracking count.
+func (pb *PipelineBridge) InFlightCount() int {
+	pb.mu.Lock()
+	defer pb.mu.Unlock()
+	return len(pb.inFlight)
+}
+
+func isHTTPRequest(data []byte) bool {
+	if len(data) < 4 {
+		return false
+	}
+	methods := []string{"GET ", "POST ", "PUT ", "DELETE ", "HEAD ", "OPTIONS ", "PATCH "}
+	str := string(data[:min(len(data), 10)])
+	for _, m := range methods {
+		if strings.HasPrefix(str, m) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHTTPResponse(data []byte) bool {
+	return len(data) >= 8 && (strings.HasPrefix(string(data[:8]), "HTTP/1.1") || strings.HasPrefix(string(data[:8]), "HTTP/1.0"))
+}
+
+func formatHTTPName(data []byte) string {
+	lineEnd := bytes.IndexByte(data, '\n')
+	if lineEnd == -1 {
+		lineEnd = min(len(data), 32)
+	}
+	firstLine := strings.TrimSpace(string(data[:lineEnd]))
+	parts := strings.Split(firstLine, " ")
+	if len(parts) >= 2 {
+		return parts[0] + " " + parts[1]
+	}
+	return "HTTP Request"
+}
+
+func parseHTTPDetails(data []byte, span *TraceSpan) {
+	reader := bufio.NewReader(bytes.NewReader(data))
+	req, err := http.ReadRequest(reader)
+	if err == nil {
+		span.Method = req.Method
+		span.Path = req.URL.Path
+		span.Host = req.Host
+		span.Attributes["http.request.method"] = req.Method
+		span.Attributes["url.path"] = req.URL.Path
+		span.Attributes["server.address"] = req.Host
+
+		// Extract W3C Traceparent if present
+		if tp := req.Header.Get("traceparent"); tp != "" {
+			span.Attributes["w3c.traceparent"] = tp
+			parts := strings.Split(tp, "-")
+			if len(parts) >= 4 && len(parts[1]) == 32 && len(parts[2]) == 16 {
+				if tBytes, err := hex.DecodeString(parts[1]); err == nil && len(tBytes) == 16 {
+					copy(span.TraceID[:], tBytes)
+				}
+				if pBytes, err := hex.DecodeString(parts[2]); err == nil && len(pBytes) == 8 {
+					copy(span.ParentSpanID[:], pBytes)
+				}
+			}
+		}
+	} else {
+		// Fallback simple parsing
+		lines := strings.Split(string(data), "\r\n")
+		parts := strings.Split(lines[0], " ")
+		if len(parts) >= 2 {
+			span.Method = parts[0]
+			span.Path = parts[1]
+			span.Attributes["http.request.method"] = parts[0]
+			span.Attributes["url.path"] = parts[1]
+		}
+		for _, line := range lines[1:] {
+			if strings.HasPrefix(strings.ToLower(line), "traceparent:") {
+				tp := strings.TrimSpace(line[len("traceparent:"):])
+				span.Attributes["w3c.traceparent"] = tp
+				parts := strings.Split(tp, "-")
+				if len(parts) >= 4 && len(parts[1]) == 32 && len(parts[2]) == 16 {
+					if tBytes, err := hex.DecodeString(parts[1]); err == nil && len(tBytes) == 16 {
+						copy(span.TraceID[:], tBytes)
+					}
+					if pBytes, err := hex.DecodeString(parts[2]); err == nil && len(pBytes) == 8 {
+						copy(span.ParentSpanID[:], pBytes)
+					}
+				}
+			}
+		}
+	}
+}
+
+func parseHTTPResponseDetails(data []byte, span *TraceSpan) {
+	reader := bufio.NewReader(bytes.NewReader(data))
+	resp, err := http.ReadResponse(reader, nil)
+	if err == nil {
+		span.HTTPStatus = resp.StatusCode
+		span.StatusCode = resp.StatusCode
+		span.Attributes["http.response.status_code"] = strconv.Itoa(resp.StatusCode)
+		if resp.StatusCode >= 400 {
+			span.StatusMsg = resp.Status
+		}
+	} else {
+		// Fallback
+		parts := strings.Split(strings.Split(string(data), "\r\n")[0], " ")
+		if len(parts) >= 2 {
+			if code, err := strconv.Atoi(parts[1]); err == nil {
+				span.HTTPStatus = code
+				span.StatusCode = code
+				span.Attributes["http.response.status_code"] = parts[1]
+			}
+		}
+	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
